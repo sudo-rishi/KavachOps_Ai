@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KavachOps AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --font-display: 'Sora', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-body:    'DM Sans', system-ui, sans-serif;
+  --font-mono:    'DM Mono', 'JetBrains Mono', monospace;
+  --bg: #f4f6fa; --surface: #ffffff;
+  --border: #e8ecf2; --border-mid: #d1d9e6;
+  --text-1: #0f172a; --text-2: #475569; --text-3: #94a3b8;
+  --accent: #2d6bff; --accent-soft: #f0f5ff;
+  --sw: 232px; --hh: 56px;
+  --r-sm:6px; --r-md:10px; --r-lg:14px; --r-xl:20px;
+  --sh-xs:0 1px 2px rgba(15,23,42,.05);
+  --sh-sm:0 1px 3px rgba(15,23,42,.08),0 1px 2px rgba(15,23,42,.04);
+  --sh-md:0 4px 12px rgba(15,23,42,.07),0 2px 4px rgba(15,23,42,.04);
+  --sh-lg:0 10px 24px rgba(15,23,42,.08),0 4px 8px rgba(15,23,42,.04);
+}
+html,body,#root{height:100%}
+body{font-family:var(--font-body);font-size:14px;line-height:1.6;color:var(--text-1);background:var(--bg);-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#d1d9e6;border-radius:99px}
+input,select,textarea{font-family:var(--font-body);font-size:13px;color:var(--text-1);background:#fff;border:1.5px solid var(--border);border-radius:var(--r-md);padding:8px 12px;outline:none;width:100%;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{border-color:#93b4ff;box-shadow:0 0 0 3px rgba(45,107,255,.1)}
+textarea{resize:vertical;min-height:80px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulseDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+.page-enter{animation:fadeUp .22s ease both}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ═══════════════════════════════════════
+// DESIGN SYSTEM
+// ═══════════════════════════════════════
+const sC = (sev) => {
+  const s = (sev||'').toLowerCase();
+  if(s==='critical') return{bg:'#fff1f2',br:'#fecdd3',tx:'#be123c',dot:'#f43f5e'};
+  if(s==='high')     return{bg:'#fffbeb',br:'#fde68a',tx:'#b45309',dot:'#f59e0b'};
+  if(s==='medium')   return{bg:'#f5f3ff',br:'#ddd6fe',tx:'#6d28d9',dot:'#8b5cf6'};
+  if(s==='low')      return{bg:'#ecfdf5',br:'#a7f3d0',tx:'#047857',dot:'#10b981'};
+  return{bg:'#f1f5f9',br:'#e2e8f0',tx:'#475569',dot:'#94a3b8'};
+};
+const stC = (st) => {
+  const s=(st||'').toLowerCase().replace(/_/g,'-');
+  if(s==='open')           return{bg:'#fff1f2',br:'#fecdd3',tx:'#be123c'};
+  if(s==='investigating')  return{bg:'#fffbeb',br:'#fde68a',tx:'#b45309'};
+  if(s==='contained')      return{bg:'#f5f3ff',br:'#ddd6fe',tx:'#6d28d9'};
+  if(s==='resolved'||s==='completed'||s==='clean'||s==='active') return{bg:'#ecfdf5',br:'#a7f3d0',tx:'#047857'};
+  if(s==='new'||s==='running') return{bg:'#f0f9ff',br:'#bae6fd',tx:'#0369a1'};
+  if(s==='infected')       return{bg:'#fff1f2',br:'#fecdd3',tx:'#be123c'};
+  if(s==='suspicious')     return{bg:'#fffbeb',br:'#fde68a',tx:'#b45309'};
+  if(s==='false-positive') return{bg:'#f1f5f9',br:'#e2e8f0',tx:'#64748b'};
+  return{bg:'#f1f5f9',br:'#e2e8f0',tx:'#475569'};
+};
+
+// ═══════════════════════════════════════
+// SEED DATA
+// ═══════════════════════════════════════
+const ts = m => new Date(Date.now()-m*60000).toISOString();
+const ALERTS0 = [
+  {alertId:1,timestamp:ts(2),  severity:'CRITICAL',alertType:'IDS',          sourceIp:'185.220.101.5',destinationIp:'192.168.1.1', destinationPort:22,  protocol:'TCP',  ruleName:'SSH Brute Force Detection', status:'new',           alertMessage:'SSH brute force from Tor exit node — 84 attempts/60s'},
+  {alertId:2,timestamp:ts(8),  severity:'HIGH',    alertType:'IDS',          sourceIp:'203.0.113.42', destinationIp:'192.168.1.1', destinationPort:3389,protocol:'TCP',  ruleName:'RDP Brute Force Detection', status:'investigating',  alertMessage:'RDP credential spray from external IP'},
+  {alertId:3,timestamp:ts(15), severity:'CRITICAL',alertType:'WINDOWS_EVENT',sourceIp:'127.0.0.1',   destinationIp:'127.0.0.1',   destinationPort:0,   protocol:'N/A',  ruleName:'[WinEvent 7045]',           status:'new',           alertMessage:'New service: SvcHostHelper.exe from C:\\Windows\\Temp'},
+  {alertId:4,timestamp:ts(22), severity:'MEDIUM',  alertType:'IDS',          sourceIp:'10.0.0.55',   destinationIp:'8.8.8.8',     destinationPort:53,  protocol:'UDP',  ruleName:'DNS Query Monitoring',      status:'resolved',      alertMessage:'Unusual DNS query volume — possible C2 beaconing'},
+  {alertId:5,timestamp:ts(35), severity:'HIGH',    alertType:'WINDOWS_EVENT',sourceIp:'127.0.0.1',   destinationIp:'127.0.0.1',   destinationPort:0,   protocol:'N/A',  ruleName:'[WinEvent 4625]',           status:'new',           alertMessage:'5 consecutive failed logins for Administrator'},
+  {alertId:6,timestamp:ts(90), severity:'CRITICAL',alertType:'ANOMALY',      sourceIp:'10.0.0.55',   destinationIp:'45.33.32.156',destinationPort:4444,protocol:'TCP',  ruleName:'ML Anomaly Detection',      status:'investigating',  alertMessage:'Reverse-shell pattern — anomaly score 0.94'},
+];
+const INCIDENTS0 = [
+  {incidentId:1,incidentNumber:'INC-20240320-00001',title:'SSH Brute Force from Tor Exit Node',        severity:'critical',status:'open',         createdAt:ts(2),   assignedTo:'analyst1',affectedAssets:'192.168.1.1',   description:'Multiple SSH brute-force attempts from Tor node 185.220.101.5.'},
+  {incidentId:2,incidentNumber:'INC-20240320-00002',title:'Suspicious Windows Service Installation',   severity:'critical',status:'investigating',createdAt:ts(15),  assignedTo:'admin',   affectedAssets:'DESKTOP-SGD01', description:'SvcHostHelper.exe installed from temp directory. Possible persistence.'},
+  {incidentId:3,incidentNumber:'INC-20240319-00003',title:'RDP Brute Force Campaign',                  severity:'high',    status:'contained',    createdAt:ts(480), assignedTo:'analyst1',affectedAssets:'192.168.1.1',   description:'Sustained RDP brute force from 203.0.113.42. IP blocked.'},
+  {incidentId:4,incidentNumber:'INC-20240318-00004',title:'DNS C2 Beaconing Attempt',                  severity:'medium',  status:'resolved',     createdAt:ts(2880),assignedTo:'analyst2',affectedAssets:'10.0.0.55',     description:'Unusual DNS patterns. Confirmed benign — dev tool update service.'},
+];
+const MALWARE0 = [
+  {scanId:1,fileName:'invoice_Q4_2024.exe', fileHash:'a3f8c2d1e5b47f2a9c0e3d8b6a1f4c2e',scanEngine:'HEURISTIC+YARA',scanResult:'infected',  threatName:'Trojan.GenericKD.47829311',virustotalPositives:45,virustotalTotal:72,quarantined:true, scanTime:ts(30)},
+  {scanId:2,fileName:'update_patch.msi',    fileHash:'9b2e7f1a3c8d4f0e5b7a2c9d1e3f6b8a',scanEngine:'VIRUSTOTAL',    scanResult:'suspicious', threatName:'PUP.Optional.OpenCandy',  virustotalPositives:3, virustotalTotal:72,quarantined:false,scanTime:ts(120)},
+  {scanId:3,fileName:'notepad.exe',         fileHash:'4d6a1c9e2b7f3e8d0a5c1b9e4f7a2c6d',scanEngine:'HEURISTIC+YARA',scanResult:'clean',      threatName:null,                      virustotalPositives:0, virustotalTotal:72,quarantined:false,scanTime:ts(240)},
+  {scanId:4,fileName:'svchost_helper.dll',  fileHash:'8c3f5e2a7b1d9e4c0f6a3b8e5d2c7f1a',scanEngine:'FULL',          scanResult:'infected',   threatName:'Backdoor.Meterpreter.A',  virustotalPositives:61,virustotalTotal:72,quarantined:true, scanTime:ts(600)},
+];
+const EVENTS0 = [
+  {logId:1,eventId:4625,channel:'Security',level:'Warning',    source:'Security Auditing',  computerName:'DESKTOP-SGD01',userName:'Administrator',eventTime:ts(5), message:'Account logon failure · Workstation: ATTACKER-PC · Wrong password',               securityRelevant:true},
+  {logId:2,eventId:7045,channel:'System',  level:'Information',source:'Service Control Mgr',computerName:'DESKTOP-SGD01',userName:'SYSTEM',       eventTime:ts(15),message:'New service: SvcHostHelper · Path: C:\\Windows\\Temp\\svchost.exe',               securityRelevant:true},
+  {logId:3,eventId:4624,channel:'Security',level:'Information',source:'Security Auditing',  computerName:'DESKTOP-SGD01',userName:'Rishikesh',    eventTime:ts(20),message:'Successful logon · Type: Interactive · IP: 127.0.0.1',                            securityRelevant:false},
+  {logId:4,eventId:4688,channel:'Security',level:'Information',source:'Security Auditing',  computerName:'DESKTOP-SGD01',userName:'SYSTEM',       eventTime:ts(25),message:'New process: powershell.exe -enc JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAA==',        securityRelevant:true},
+  {logId:5,eventId:4740,channel:'Security',level:'Warning',    source:'Security Auditing',  computerName:'DESKTOP-SGD01',userName:'Administrator',eventTime:ts(35),message:'Account locked out · Caller: WORKSTATION-PC',                                       securityRelevant:true},
+  {logId:6,eventId:4698,channel:'Security',level:'Warning',    source:'Security Auditing',  computerName:'DESKTOP-SGD01',userName:'SYSTEM',       eventTime:ts(40),message:'Scheduled task created: \\Microsoft\\Windows\\Update\\SvcUpdate',                    securityRelevant:true},
+];
+const RULES0 = [
+  {ruleId:1, ruleName:'SSH Brute Force Detection', ruleType:'custom',severity:3,active:true, portPattern:'22',       protocolPattern:'TCP', matchCount:42},
+  {ruleId:2, ruleName:'RDP Brute Force Detection', ruleType:'custom',severity:3,active:true, portPattern:'3389',     protocolPattern:'TCP', matchCount:18},
+  {ruleId:3, ruleName:'HTTP Non-Standard Port',    ruleType:'custom',severity:1,active:true, portPattern:'8080-9090',protocolPattern:'TCP', matchCount:7},
+  {ruleId:4, ruleName:'ICMP Flood Detection',      ruleType:'custom',severity:2,active:true, portPattern:'any',      protocolPattern:'ICMP',matchCount:3},
+  {ruleId:5, ruleName:'DNS Query Monitoring',      ruleType:'custom',severity:1,active:true, portPattern:'53',       protocolPattern:'UDP', matchCount:156},
+  {ruleId:6, ruleName:'Suspicious PowerShell',     ruleType:'custom',severity:4,active:true, portPattern:'any',      protocolPattern:'TCP', matchCount:2},
+  {ruleId:7, ruleName:'Port Scan Detection',       ruleType:'custom',severity:2,active:true, portPattern:'1-1024',   protocolPattern:'TCP', matchCount:9},
+  {ruleId:8, ruleName:'Telnet Access',             ruleType:'custom',severity:3,active:true, portPattern:'23',       protocolPattern:'TCP', matchCount:1},
+  {ruleId:9, ruleName:'FTP Clear Text Auth',       ruleType:'custom',severity:2,active:true, portPattern:'21',       protocolPattern:'TCP', matchCount:4},
+  {ruleId:10,ruleName:'SMB Lateral Movement',      ruleType:'custom',severity:3,active:false,portPattern:'445',      protocolPattern:'TCP', matchCount:12},
+];
+const VULNS0 = [
+  {findingId:1,hostIp:'192.168.1.1',  vulnerabilityName:'CVE-2021-44228 Log4Shell RCE',      cveId:'CVE-2021-44228',severity:'critical',status:'open',       cvssScore:10.0},
+  {findingId:2,hostIp:'10.0.0.55',    vulnerabilityName:'EternalBlue SMBv1 Memory Corruption',cveId:'CVE-2017-0144', severity:'critical',status:'in_progress',cvssScore:9.3},
+  {findingId:3,hostIp:'192.168.1.100',vulnerabilityName:'OpenSSH Username Enumeration',        cveId:'CVE-2018-15473',severity:'medium',  status:'open',       cvssScore:5.3},
+  {findingId:4,hostIp:'192.168.1.1',  vulnerabilityName:'Default Credentials (admin/admin)',   cveId:null,            severity:'high',    status:'open',       cvssScore:8.0},
+];
+const HPS0 = [
+  {honeypotId:1,honeypotName:'SSH-Trap-01', honeypotType:'ssh', ipAddress:'192.168.1.200',port:22,active:true, interactions:14,lastActivity:ts(12)},
+  {honeypotId:2,honeypotName:'HTTP-Trap-01',honeypotType:'http',ipAddress:'192.168.1.201',port:80,active:true, interactions:6, lastActivity:ts(45)},
+  {honeypotId:3,honeypotName:'FTP-Trap-01', honeypotType:'ftp', ipAddress:'192.168.1.202',port:21,active:false,interactions:2, lastActivity:ts(2880)},
+];
+const ATT0 = [
+  {ip:'185.220.101.5',firstSeen:ts(120),lastSeen:ts(2), threatLevel:'critical',country:'DE',interactions:14},
+  {ip:'203.0.113.42', firstSeen:ts(500),lastSeen:ts(8), threatLevel:'high',    country:'RU',interactions:6},
+  {ip:'198.51.100.23',firstSeen:ts(1440),lastSeen:ts(60),threatLevel:'medium', country:'CN',interactions:2},
+];
+const USERS0 = [
+  {userId:1,username:'admin',   email:'admin@shieldgod.local',   role:'admin',  active:true, createdAt:ts(43200),lastLogin:ts(0.1)},
+  {userId:2,username:'analyst1',email:'analyst1@shieldgod.local',role:'analyst',active:true, createdAt:ts(10080),lastLogin:ts(30)},
+  {userId:3,username:'analyst2',email:'analyst2@shieldgod.local',role:'analyst',active:true, createdAt:ts(20160),lastLogin:ts(600)},
+  {userId:4,username:'auditor1',email:'auditor1@shieldgod.local',role:'auditor',active:false,createdAt:ts(50000),lastLogin:ts(5000)},
+];
+const EV_NAMES={4625:'Failed Logon',4624:'Successful Logon',7045:'New Service',4688:'Process Created',4740:'Account Locked',4720:'User Created',4698:'Task Created',4719:'Policy Changed',4672:'Special Privileges'};
+
+// ═══════════════════════════════════════
+// SHARED UI COMPONENTS
+// ═══════════════════════════════════════
+function Badge({label,severity,status,size='sm'}){
+  const c=severity?sC(severity):stC(status||label||'');
+  const pd=size==='xs'?'2px 7px':size==='lg'?'5px 12px':'3px 9px';
+  const fs=size==='xs'?10:size==='lg'?13:11;
+  return <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:pd,borderRadius:99,fontSize:fs,fontWeight:700,fontFamily:'var(--font-mono)',letterSpacing:'.02em',background:c.bg,border:`1.5px solid ${c.br}`,color:c.tx,whiteSpace:'nowrap'}}>
+    {c.dot&&<span style={{width:5,height:5,borderRadius:'50%',background:c.dot,flexShrink:0,animation:'pulseDot 2s ease-in-out infinite',display:'inline-block'}}/>}
+    {label||severity||status}
+  </span>;
+}
+
+function Btn({children,onClick,variant='ghost',size='md',disabled,style={}}){
+  const [h,sH]=useState(false);
+  const pads={xs:'5px 9px',sm:'6px 12px',md:'8px 16px',lg:'10px 20px'};
+  const fss={xs:11,sm:12,md:13,lg:14};
+  const vars={
+    primary:{background:h?'#1a52e0':'#2d6bff',color:'#fff',border:'1.5px solid '+(h?'#1a52e0':'#2d6bff')},
+    danger: {background:h?'#fee2e2':'#fff1f2',color:'#be123c',border:'1.5px solid #fecdd3'},
+    success:{background:h?'#d1fae5':'#ecfdf5',color:'#047857',border:'1.5px solid #a7f3d0'},
+    ghost:  {background:h?'#f1f5f9':'transparent',color:'#334155',border:'1.5px solid #e2e8f0'},
+    amber:  {background:h?'#fef3c7':'#fffbeb',color:'#b45309',border:'1.5px solid #fde68a'},
+    outline:{background:h?'#f0f5ff':'transparent',color:'#2d6bff',border:'1.5px solid #c1d4ff'},
+  };
+  return <button onMouseEnter={()=>sH(true)} onMouseLeave={()=>sH(false)} onClick={onClick} disabled={disabled}
+    style={{display:'inline-flex',alignItems:'center',gap:6,cursor:disabled?'not-allowed':'pointer',
+      fontFamily:'var(--font-body)',fontWeight:600,borderRadius:'var(--r-md)',transition:'all .14s',outline:'none',
+      opacity:disabled?.6:1,padding:pads[size],fontSize:fss[size],...vars[variant],...style}}>{children}</button>;
+}
+
+function Card({children,style={},padding='18px'}){
+  return <div style={{background:'var(--surface)',border:'1.5px solid var(--border)',borderRadius:'var(--r-lg)',padding,boxShadow:'var(--sh-xs)',...style}}>{children}</div>;
+}
+
+function Panel({title,subtitle,actions,children,padding='0'}){
+  return <Card padding='0'>
+    {(title||actions)&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'13px 18px',borderBottom:'1.5px solid var(--border)',background:'#fafbfd',borderRadius:'var(--r-lg) var(--r-lg) 0 0'}}>
+      <div>
+        <div style={{fontFamily:'var(--font-display)',fontWeight:700,fontSize:13,color:'var(--text-1)',letterSpacing:'-.01em'}}>{title}</div>
+        {subtitle&&<div style={{fontSize:11,color:'var(--text-3)',marginTop:1}}>{subtitle}</div>}
+      </div>
+      {actions&&<div style={{display:'flex',gap:8,alignItems:'center'}}>{actions}</div>}
+    </div>}
+    <div style={{padding}}>{children}</div>
+  </Card>;
+}
+
+function StatCard({icon,label,value,sub,color='#2d6bff',onClick}){
+  const [h,sH]=useState(false);
+  return <div onClick={onClick} onMouseEnter={()=>sH(true)} onMouseLeave={()=>sH(false)}
+    style={{background:'var(--surface)',border:`1.5px solid ${h?color+'55':'var(--border)'}`,borderRadius:'var(--r-lg)',
+      padding:'16px 18px',boxShadow:h?'var(--sh-md)':'var(--sh-xs)',transition:'all .18s',cursor:onClick?'pointer':'default',position:'relative',overflow:'hidden'}}>
+    <div style={{position:'absolute',bottom:0,left:0,right:0,height:3,background:`linear-gradient(90deg,transparent,${color}40,transparent)`,opacity:h?1:.5,transition:'opacity .2s'}}/>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
+      <div style={{width:34,height:34,borderRadius:'var(--r-md)',background:color+'18',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17}}>{icon}</div>
+    </div>
+    <div style={{fontSize:10,color:'var(--text-3)',fontWeight:600,letterSpacing:'.05em',textTransform:'uppercase',marginBottom:3,fontFamily:'var(--font-mono)'}}>{label}</div>
+    <div style={{fontSize:26,fontWeight:700,color,fontFamily:'var(--font-display)',lineHeight:1.1,letterSpacing:'-.02em'}}>{value}</div>
+    {sub&&<div style={{fontSize:11,color:'var(--text-3)',marginTop:3}}>{sub}</div>}
+  </div>;
+}
+
+function Grid({cols=2,gap=16,children,style={}}){
+  return <div style={{display:'grid',gridTemplateColumns:`repeat(${cols},minmax(0,1fr))`,gap,...style}}>{children}</div>;
+}
+
+function IPPill({ip}){
+  return <span style={{fontFamily:'var(--font-mono)',fontSize:11,background:'#f0f5ff',border:'1px solid #c1d4ff',color:'#1340b8',padding:'2px 8px',borderRadius:'var(--r-sm)',whiteSpace:'nowrap'}}>{ip}</span>;
+}
+
+function Modal({open,onClose,title,children,footer,width=520}){
+  if(!open)return null;
+  return <div style={{position:'fixed',inset:0,zIndex:999,background:'rgba(15,23,42,.45)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}
+    onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div style={{background:'var(--surface)',borderRadius:'var(--r-xl)',width,maxWidth:'95vw',maxHeight:'88vh',overflow:'auto',boxShadow:'0 24px 48px rgba(15,23,42,.18)',border:'1.5px solid var(--border)',animation:'fadeUp .2s ease'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 22px',borderBottom:'1.5px solid var(--border)',background:'#fafbfd'}}>
+        <h3 style={{fontFamily:'var(--font-display)',fontWeight:700,fontSize:15,color:'var(--text-1)',letterSpacing:'-.02em'}}>{title}</h3>
+        <button onClick={onClose} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'var(--text-3)',lineHeight:1,padding:'2px 6px',borderRadius:'var(--r-sm)'}}>×</button>
+      </div>
+      <div style={{padding:'20px 22px'}}>{children}</div>
+      {footer&&<div style={{padding:'13px 22px',borderTop:'1.5px solid var(--border)',display:'flex',justifyContent:'flex-end',gap:10,background:'#fafbfd'}}>{footer}</div>}
+    </div>
+  </div>;
+}
+
+function FormGroup({label,children,hint}){
+  return <div style={{marginBottom:14}}>
+    <label style={{display:'block',fontFamily:'var(--font-mono)',fontSize:10,fontWeight:600,color:'var(--text-2)',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:5}}>{label}</label>
+    {children}
+    {hint&&<div style={{fontSize:11,color:'var(--text-3)',marginTop:3}}>{hint}</div>}
+  </div>;
+}
+
+function DataTable({columns,rows,emptyText='No data found'}){
+  return <div style={{overflowX:'auto'}}>
+    <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+      <thead><tr style={{background:'#fafbfd',borderBottom:'1.5px solid var(--border)'}}>
+        {columns.map((c,i)=><th key={i} style={{textAlign:'left',padding:'9px 14px',fontFamily:'var(--font-mono)',fontSize:10,fontWeight:600,color:'var(--text-3)',letterSpacing:'.06em',textTransform:'uppercase',whiteSpace:'nowrap'}}>{c.label}</th>)}
+      </tr></thead>
+      <tbody>
+        {rows.length===0?<tr><td colSpan={columns.length} style={{textAlign:'center',padding:'36px 16px',color:'var(--text-3)',fontSize:13}}>{emptyText}</td></tr>
+        :rows.map((row,i)=><tr key={i} style={{borderBottom:'1px solid #f1f5f9',transition:'background .1s'}}
+          onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'}
+          onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+          {columns.map((col,j)=><td key={j} style={{padding:'9px 14px',verticalAlign:'middle',fontFamily:col.mono?'var(--font-mono)':'var(--font-body)',fontSize:col.mono?11:13,color:col.dim?'var(--text-2)':'var(--text-1)',maxWidth:col.maxWidth||'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+            {col.render?col.render(row):row[col.key]}
+          </td>)}
+        </tr>)}
+      </tbody>
+    </table>
+  </div>;
+}
+
+function FeedItem({time,severity,badge,message}){
+  const dc={critical:'#f43f5e',high:'#f59e0b',medium:'#8b5cf6',low:'#10b981',info:'#0ea5e9'};
+  return <div style={{display:'flex',alignItems:'flex-start',gap:9,padding:'7px 12px',borderBottom:'1px solid #f1f5f9',animation:'slideIn .2s ease'}}>
+    <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)',minWidth:56,flexShrink:0,marginTop:1}}>{time}</span>
+    <span style={{width:6,height:6,borderRadius:'50%',background:dc[(severity||'low').toLowerCase()]||'#94a3b8',marginTop:5,flexShrink:0}}/>
+    <Badge label={badge} size='xs'/>
+    <span style={{fontSize:12,color:'var(--text-2)',lineHeight:1.5}}>{message}</span>
+  </div>;
+}
+
+function LivePulse({active,label}){
+  return <div style={{display:'flex',alignItems:'center',gap:5}}>
+    <span style={{width:6,height:6,borderRadius:'50%',background:active?'#10b981':'#94a3b8',animation:active?'pulseDot 2s ease-in-out infinite':'none',display:'inline-block'}}/>
+    {label&&<span style={{fontSize:11,fontFamily:'var(--font-mono)',fontWeight:600,color:active?'#047857':'var(--text-3)'}}>{label}</span>}
+  </div>;
+}
+
+function Toggle({value,onChange}){
+  return <div onClick={()=>onChange(!value)} style={{width:36,height:20,borderRadius:99,cursor:'pointer',background:value?'#2d6bff':'#e2e8f0',position:'relative',transition:'background .2s',flexShrink:0,border:`1.5px solid ${value?'#1a52e0':'#cbd5e1'}`}}>
+    <div style={{width:14,height:14,borderRadius:'50%',background:'#fff',position:'absolute',top:'50%',transform:'translateY(-50%)',left:value?17:2,transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
+  </div>;
+}
+
+function ProgressBar({value,max=100,color='#2d6bff',height=5}){
+  const p=Math.min(100,max>0?(value/max)*100:0);
+  return <div style={{height,background:'#f1f5f9',borderRadius:99,overflow:'hidden'}}>
+    <div style={{height:'100%',width:`${p}%`,background:color,borderRadius:99,transition:'width .5s ease'}}/>
+  </div>;
+}
+
+function EmptyState({icon='📭',title,sub}){
+  return <div style={{textAlign:'center',padding:'36px 20px',color:'var(--text-3)'}}>
+    <div style={{fontSize:30,marginBottom:8}}>{icon}</div>
+    <div style={{fontWeight:600,fontSize:14,color:'var(--text-2)',marginBottom:3}}>{title}</div>
+    {sub&&<div style={{fontSize:12}}>{sub}</div>}
+  </div>;
+}
+
+function fmtT(ts){try{return new Date(ts).toLocaleTimeString('en-GB',{hour12:false});}catch{return '--';}}
+function fmtDT(ts){try{return new Date(ts).toLocaleString('en-GB',{dateStyle:'short',timeStyle:'short'});}catch{return '--';}}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE: LOGIN
+// ═══════════════════════════════════════════════════════════════════
+function Login({onLogin}){
+  const [u,sU]=useState('admin');
+  const [p,sP]=useState('password');
+  const [err,sE]=useState('');
+  const [ld,sL]=useState(false);
+  const go=()=>{
+    sE('');sL(true);
+    setTimeout(()=>{
+      if((u==='admin'&&p==='password')||(u.length>=3&&p.length>=6)){
+        onLogin({username:u,role:u==='admin'?'admin':'analyst'});
+      } else {sE('Invalid credentials.');sL(false);}
+    },700);
+  };
+  return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#f0f5ff 0%,#f8fafc 40%,#edfaf5 100%)',padding:20}}>
+    <div style={{width:420,background:'#fff',borderRadius:24,boxShadow:'0 24px 60px rgba(15,23,42,.12),0 8px 20px rgba(15,23,42,.06)',border:'1.5px solid #e8ecf2',overflow:'hidden',animation:'fadeUp .3s ease'}}>
+      <div style={{padding:'32px 36px 24px',background:'linear-gradient(135deg,#f0f5ff,#f8fafc)',borderBottom:'1.5px solid #e8ecf2',textAlign:'center'}}>
+        <div style={{width:62,height:62,borderRadius:18,margin:'0 auto 14px',background:'linear-gradient(135deg,#2d6bff,#7c3aed)',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 8px 24px rgba(45,107,255,.3)',fontSize:28}}>🛡️</div>
+        <h1 style={{fontFamily:'var(--font-display)',fontSize:24,fontWeight:800,letterSpacing:'-.04em',background:'linear-gradient(135deg,#0f172a,#334155)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',marginBottom:5}}>KavachOps AI</h1>
+        <p style={{fontSize:12,color:'#64748b',letterSpacing:'.03em'}}>Sarvam Serves Raksha</p>
+      </div>
+      <div style={{padding:'26px 36px 32px'}}>
+        {err&&<div style={{background:'#fff1f2',border:'1.5px solid #fecdd3',color:'#be123c',borderRadius:'var(--r-md)',padding:'9px 14px',fontSize:13,marginBottom:16}}>⚠ {err}</div>}
+        <FormGroup label="Operator ID"><input value={u} onChange={e=>sU(e.target.value)} onKeyDown={e=>e.key==='Enter'&&go()} placeholder="admin" autoFocus/></FormGroup>
+        <FormGroup label="Access Code"><input type="password" value={p} onChange={e=>sP(e.target.value)} onKeyDown={e=>e.key==='Enter'&&go()} placeholder="••••••••"/></FormGroup>
+        <Btn variant="primary" onClick={go} disabled={ld} style={{width:'100%',justifyContent:'center',padding:'11px 0',fontSize:14,marginTop:6}}>{ld?'Authenticating…':'Authenticate & Access ›'}</Btn>
+        <div style={{marginTop:18,padding:'11px 13px',background:'#f8fafc',borderRadius:'var(--r-md)',border:'1.5px solid #e8ecf2',fontSize:12,color:'#64748b'}}>
+          <span style={{fontFamily:'var(--font-mono)',fontSize:10,display:'block',marginBottom:3}}>DEFAULT CREDENTIALS</span>
+          <strong>admin</strong> / password
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE: SIDEBAR
+// ═══════════════════════════════════════════════════════════════════
+const NAV=[
+  {id:'dashboard',icon:'⬡',label:'Dashboard',    badgeKey:null},
+  {id:'network',  icon:'📡',label:'Network & IDS',badgeKey:'alerts', bc:'red'},
+  {id:'events',   icon:'🪟',label:'Win Events',   badgeKey:'events', bc:'amber'},
+  {id:'malware',  icon:'🦠',label:'Malware',      badgeKey:'malware',bc:'red'},
+  {id:'incidents',icon:'🔥',label:'Incidents',    badgeKey:'incidents',bc:'amber'},
+  {id:'vuln',     icon:'🔍',label:'Vulnerability',badgeKey:null},
+  {id:'honeypot', icon:'🍯',label:'Honeypots',    badgeKey:null},
+  {id:'rules',    icon:'📋',label:'IDS Rules',    badgeKey:'rules',bc:'blue'},
+  {id:'reports',  icon:'📊',label:'Reports',      badgeKey:null},
+  {id:'users',    icon:'👤',label:'Users',         badgeKey:null},
+];
+const BC_COLORS={red:{bg:'#fff1f2',tx:'#be123c',br:'#fecdd3'},amber:{bg:'#fffbeb',tx:'#b45309',br:'#fde68a'},blue:{bg:'#f0f5ff',tx:'#1340b8',br:'#c1d4ff'}};
+function Sidebar({active,onNav,badges,capRunning}){
+  const [hov,sH]=useState(null);
+  return <aside style={{width:'var(--sw)',minWidth:'var(--sw)',height:'100vh',background:'#fff',borderRight:'1.5px solid var(--border)',display:'flex',flexDirection:'column',boxShadow:'2px 0 8px rgba(15,23,42,.04)',position:'sticky',top:0,zIndex:100}}>
+    <div style={{padding:'16px 16px 14px',borderBottom:'1.5px solid var(--border)',display:'flex',alignItems:'center',gap:10}}>
+      <div style={{width:36,height:36,borderRadius:11,background:'linear-gradient(135deg,#2d6bff,#7c3aed)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0,boxShadow:'0 4px 12px rgba(45,107,255,.25)'}}>🛡️</div>
+      <div>
+        <div style={{fontFamily:'var(--font-display)',fontWeight:800,fontSize:13,color:'var(--text-1)',letterSpacing:'-.02em'}}>Shield-God</div>
+        <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:'var(--text-3)',letterSpacing:'.06em',textTransform:'uppercase'}}>SOC Platform v1.0</div>
+      </div>
+    </div>
+    <nav style={{flex:1,overflowY:'auto',padding:'8px 8px 0'}}>
+      <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:'var(--text-3)',letterSpacing:'.1em',textTransform:'uppercase',padding:'6px 8px 3px',fontWeight:600}}>Modules</div>
+      {NAV.map(n=>{
+        const isA=active===n.id,isH=hov===n.id;
+        const bv=n.badgeKey?badges[n.badgeKey]:null;
+        const bc=n.bc?BC_COLORS[n.bc]:null;
+        return <div key={n.id} onClick={()=>onNav(n.id)} onMouseEnter={()=>sH(n.id)} onMouseLeave={()=>sH(null)}
+          style={{display:'flex',alignItems:'center',gap:8,padding:'7px 9px',borderRadius:'var(--r-md)',cursor:'pointer',marginBottom:1,
+            background:isA?'#f0f5ff':isH?'#f8fafc':'transparent',
+            borderLeft:`2.5px solid ${isA?'#2d6bff':'transparent'}`,transition:'all .13s'}}>
+          <span style={{fontSize:14,width:18,textAlign:'center',flexShrink:0}}>{n.icon}</span>
+          <span style={{fontFamily:'var(--font-body)',fontWeight:isA?600:500,fontSize:13,color:isA?'#1340b8':'var(--text-2)',flex:1}}>{n.label}</span>
+          {bv>0&&bc&&<span style={{background:bc.bg,color:bc.tx,border:`1px solid ${bc.br}`,fontSize:9,fontFamily:'var(--font-mono)',fontWeight:700,padding:'1px 5px',borderRadius:99}}>{bv}</span>}
+        </div>;
+      })}
+    </nav>
+    <div style={{padding:'12px 13px 14px',borderTop:'1.5px solid var(--border)',background:'#fafbfd'}}>
+      <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:'var(--text-3)',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:7,fontWeight:600}}>System Status</div>
+      {[{l:'Capture',v:capRunning?'Active':'Inactive',ok:capRunning},{l:'Win-Evts',v:'Polling',ok:true},{l:'ML Svc',v:'Online',ok:true},{l:'Database',v:'Connected',ok:true}].map(s=>(
+        <div key={s.l} style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+          <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)'}}>{s.l}</span>
+          <div style={{display:'flex',alignItems:'center',gap:4}}>
+            <span style={{width:5,height:5,borderRadius:'50%',background:s.ok?'#10b981':'#94a3b8',display:'inline-block',animation:s.ok?'pulseDot 2.5s ease-in-out infinite':'none'}}/>
+            <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:s.ok?'#047857':'var(--text-3)',fontWeight:600}}>{s.v}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  </aside>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE: HEADER
+// ═══════════════════════════════════════════════════════════════════
+const PAGE_META={
+  dashboard:{title:'Dashboard',       path:['Overview','Command Centre']},
+  network:  {title:'Network & IDS',   path:['Module 3','Capture','Alerts']},
+  events:   {title:'Windows Events',  path:['Module 3B','Win Events']},
+  malware:  {title:'Malware Detection',path:['Module 5','Scan','Quarantine']},
+  incidents:{title:'Incident Mgmt',   path:['Module 6','Incidents']},
+  vuln:     {title:'Vulnerability',   path:['Module 4','Scanner','Findings']},
+  honeypot: {title:'Honeypots',       path:['Module 7','Traps','Profiles']},
+  rules:    {title:'IDS Rules',       path:['IDS','Rules','Engine']},
+  reports:  {title:'Reports',         path:['Module 8','Reports']},
+  users:    {title:'Users',           path:['Module 1','Users','Sessions']},
+};
+function Header({page,user,capRunning,onToggleCap,onLogout,onToast}){
+  const [clk,sCl]=useState(new Date());
+  useEffect(()=>{const t=setInterval(()=>sCl(new Date()),1000);return()=>clearInterval(t);},[]);
+  const m=PAGE_META[page]||PAGE_META.dashboard;
+  return <header style={{height:'var(--hh)',background:'#fff',borderBottom:'1.5px solid var(--border)',display:'flex',alignItems:'center',padding:'0 22px',gap:14,position:'sticky',top:0,zIndex:90,boxShadow:'0 1px 4px rgba(15,23,42,.04)'}}>
+    <div>
+      <h1 style={{fontFamily:'var(--font-display)',fontWeight:700,fontSize:14,color:'var(--text-1)',letterSpacing:'-.02em',lineHeight:1.2}}>{m.title}</h1>
+      <div style={{display:'flex',gap:4,alignItems:'center'}}>
+        {m.path.map((p,i)=><span key={i} style={{display:'flex',alignItems:'center',gap:4}}>
+          {i>0&&<span style={{color:'#cbd5e1',fontSize:10}}>›</span>}
+          <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:i===m.path.length-1?'var(--text-2)':'var(--text-3)'}}>{p}</span>
+        </span>)}
+      </div>
+    </div>
+    <div style={{flex:1}}/>
+    <LivePulse active={capRunning} label={capRunning?'CAPTURING':'IDLE'}/>
+    <div style={{fontFamily:'var(--font-mono)',fontSize:12,fontWeight:500,color:'#1340b8',background:'#f0f5ff',padding:'4px 11px',borderRadius:'var(--r-md)',border:'1px solid #c1d4ff',letterSpacing:'.04em'}}>
+      {clk.toLocaleTimeString('en-GB')}
+    </div>
+    <Btn variant={capRunning?'danger':'success'} size="sm" onClick={onToggleCap}>{capRunning?'⏹ Stop Capture':'▶ Start Capture'}</Btn>
+    <Btn variant="ghost" size="sm" onClick={()=>onToast('Data refreshed','success')}>⟳</Btn>
+    <div style={{display:'flex',alignItems:'center',gap:8}}>
+      <div style={{width:28,height:28,borderRadius:'50%',background:'linear-gradient(135deg,#2d6bff,#7c3aed)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'#fff',fontFamily:'var(--font-display)'}}>{(user?.username||'A').charAt(0).toUpperCase()}</div>
+      <div style={{lineHeight:1.2}}>
+        <div style={{fontSize:12,fontWeight:600,color:'var(--text-1)'}}>{user?.username}</div>
+        <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'.05em'}}>{user?.role}</div>
+      </div>
+      <Btn variant="ghost" size="xs" onClick={onLogout}>⏻</Btn>
+    </div>
+  </header>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE: TOAST
+// ═══════════════════════════════════════════════════════════════════
+const TC={success:{bg:'#ecfdf5',br:'#a7f3d0',tx:'#047857',ic:'✓'},error:{bg:'#fff1f2',br:'#fecdd3',tx:'#be123c',ic:'✕'},warning:{bg:'#fffbeb',br:'#fde68a',tx:'#b45309',ic:'⚠'},info:{bg:'#f0f9ff',br:'#bae6fd',tx:'#0369a1',ic:'ℹ'},critical:{bg:'#fff1f2',br:'#fb7185',tx:'#be123c',ic:'🚨'}};
+function ToastItem({t,onRm}){
+  useEffect(()=>{const x=setTimeout(()=>onRm(t.id),t.type==='critical'?6000:3500);return()=>clearTimeout(x);},[]);
+  const s=TC[t.type]||TC.info;
+  return <div style={{display:'flex',alignItems:'flex-start',gap:9,background:s.bg,border:`1.5px solid ${s.br}`,borderRadius:'var(--r-lg)',padding:'11px 13px',maxWidth:320,boxShadow:'var(--sh-lg)',animation:'fadeUp .25s ease'}}>
+    <span style={{fontSize:13,flexShrink:0,marginTop:1}}>{s.ic}</span>
+    <span style={{fontSize:13,color:s.tx,lineHeight:1.5,flex:1}}>{t.message}</span>
+    <button onClick={()=>onRm(t.id)} style={{background:'none',border:'none',cursor:'pointer',color:s.tx,opacity:.6,fontSize:15,lineHeight:1,padding:0,flexShrink:0}}>×</button>
+  </div>;
+}
+function Toasts({toasts,onRm}){
+  return <div style={{position:'fixed',top:66,right:18,zIndex:9999,display:'flex',flexDirection:'column',gap:7,pointerEvents:'none'}}>
+    {toasts.map(t=><div key={t.id} style={{pointerEvents:'all'}}><ToastItem t={t} onRm={onRm}/></div>)}
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE: DASHBOARD
+// ═══════════════════════════════════════════════════════════════════
+function Dashboard({S,onNav}){
+  const crit=S.alerts.filter(a=>a.severity==='CRITICAL').length;
+  const high=S.alerts.filter(a=>a.severity==='HIGH').length;
+  const med=S.alerts.filter(a=>a.severity==='MEDIUM').length;
+  const low=S.alerts.filter(a=>a.severity==='LOW').length;
+  const openInc=S.incidents.filter(i=>['open','investigating'].includes(i.status)).length;
+  const secEvts=S.winEvents.filter(e=>e.securityRelevant).length;
+  const total=crit+high+med+low||1;
+  const fn=n=>n>=1000?(n/1000).toFixed(1)+'K':String(n);
+  return <div className="page-enter">
+    <Grid cols={4} gap={14} style={{marginBottom:20}}>
+      <StatCard icon="🚨" label="Critical+High Alerts" value={crit+high} sub="Need attention" color="#e11d48" onClick={()=>onNav('network')}/>
+      <StatCard icon="🔥" label="Open Incidents"       value={openInc}   sub="Awaiting response" color="#f59e0b" onClick={()=>onNav('incidents')}/>
+      <StatCard icon="📦" label="Packets Captured"     value={fn(S.capturePackets)} sub="This session" color="#2d6bff" onClick={()=>onNav('network')}/>
+      <StatCard icon="🪟" label="Security Events"      value={secEvts}   sub="Windows channels" color="#7c3aed" onClick={()=>onNav('events')}/>
+    </Grid>
+    <Grid cols={2} gap={16} style={{marginBottom:20}}>
+      <Panel title="Live Alert Feed" subtitle={S.captureRunning?'Streaming live':'Start capture to stream'} actions={<LivePulse active={S.captureRunning} label={S.captureRunning?'LIVE':'IDLE'}/>}>
+        <div style={{maxHeight:270,overflowY:'auto'}}>
+          {S.feedItems.length===0?<EmptyState icon="📡" title="No alerts yet" sub="Start packet capture to begin monitoring"/>
+          :S.feedItems.slice(0,20).map((f,i)=><FeedItem key={i} time={f.time} severity={f.severity} badge={f.label} message={f.message}/>)}
+        </div>
+      </Panel>
+      <Panel title="Threat Breakdown" subtitle="Last 24 hours">
+        <div style={{padding:18}}>
+          {[{l:'Critical',c:crit,cl:'#e11d48'},{l:'High',c:high,cl:'#f59e0b'},{l:'Medium',c:med,cl:'#8b5cf6'},{l:'Low',c:low,cl:'#10b981'}].map(s=>(
+            <div key={s.l} style={{marginBottom:13}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                <span style={{fontSize:13,color:'var(--text-2)',fontWeight:500}}>{s.l}</span>
+                <span style={{fontFamily:'var(--font-mono)',fontSize:12,fontWeight:700,color:s.cl}}>{s.c}</span>
+              </div>
+              <ProgressBar value={s.c} max={total} color={s.cl} height={4}/>
+            </div>
+          ))}
+          <div style={{marginTop:16,paddingTop:13,borderTop:'1.5px solid var(--border)'}}>
+            <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:9,fontWeight:600}}>Protocol Distribution</div>
+            <div style={{display:'flex',alignItems:'flex-end',gap:5,height:44}}>
+              {[{l:'TCP',p:72,c:'#2d6bff'},{l:'UDP',p:18,c:'#10b981'},{l:'ICMP',p:7,c:'#f59e0b'},{l:'Other',p:3,c:'#94a3b8'}].map(pr=>(
+                <div key={pr.l} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+                  <div style={{width:'100%',borderRadius:3,background:pr.c+'22',border:`1px solid ${pr.c}33`,height:`${pr.p*0.44}px`,position:'relative',overflow:'hidden'}}>
+                    <div style={{position:'absolute',bottom:0,left:0,right:0,background:pr.c,height:`${pr.p}%`,opacity:.75}}/>
+                  </div>
+                  <span style={{fontSize:9,fontFamily:'var(--font-mono)',color:'var(--text-3)'}}>{pr.l}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Panel>
+    </Grid>
+    <Grid cols={3} gap={12}>
+      {[
+        {icon:'📡',label:'Network IDS',    status:'Active',  color:'#10b981',sub:`${S.idsRules.filter(r=>r.active).length} rules`,page:'network'},
+        {icon:'🪟',label:'Win Events',     status:'Polling', color:'#0ea5e9',sub:'Every 5s',page:'events'},
+        {icon:'🦠',label:'Malware Engine', status:'Ready',   color:'#10b981',sub:'YARA + VT',page:'malware'},
+        {icon:'🔍',label:'Vuln Scanner',   status:S.vulnFindings.filter(f=>f.status==='open').length>0?`${S.vulnFindings.filter(f=>f.status==='open').length} Findings`:'Idle',color:S.vulnFindings.filter(f=>f.status==='open').length>0?'#f59e0b':'#94a3b8',sub:'Nmap·ZAP',page:'vuln'},
+        {icon:'🍯',label:'Honeypots',      status:`${S.honeypots.filter(h=>h.active).length} Active`,color:S.honeypots.filter(h=>h.active).length>0?'#10b981':'#94a3b8',sub:'Deception traps',page:'honeypot'},
+        {icon:'🤖',label:'ML Service',     status:'Online',  color:'#7c3aed',sub:'Anomaly detect',page:'network'},
+      ].map((m,i)=>(
+        <div key={i} onClick={()=>onNav(m.page)} style={{background:'var(--surface)',border:'1.5px solid var(--border)',borderRadius:'var(--r-lg)',padding:'14px 16px',cursor:'pointer',transition:'all .15s',boxShadow:'var(--sh-xs)'}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=m.color+'55';e.currentTarget.style.boxShadow='var(--sh-md)';}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--border)';e.currentTarget.style.boxShadow='var(--sh-xs)';}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:7}}>
+            <span style={{fontSize:18}}>{m.icon}</span>
+            <div style={{display:'flex',alignItems:'center',gap:4}}>
+              <span style={{width:5,height:5,borderRadius:'50%',background:m.color,display:'inline-block',animation:'pulseDot 2s ease-in-out infinite'}}/>
+              <span style={{fontSize:10,fontFamily:'var(--font-mono)',fontWeight:700,color:m.color,textTransform:'uppercase'}}>{m.status}</span>
+            </div>
+          </div>
+          <div style={{fontFamily:'var(--font-display)',fontWeight:700,fontSize:13,color:'var(--text-1)',marginBottom:2}}>{m.label}</div>
+          <div style={{fontSize:11,color:'var(--text-3)'}}>{m.sub}</div>
+        </div>
+      ))}
+    </Grid>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE: NETWORK & IDS
+// ═══════════════════════════════════════════════════════════════════
+function Network({S,actions,onToast}){
+  const [af,sAf]=useState('');
+  const [rm,sRm]=useState(false);
+  const [va,sVa]=useState(null);
+  const [nr,sNr]=useState({ruleName:'',severity:2,portPattern:'',protocolPattern:'TCP',payloadPattern:''});
+  const filtered=af?S.alerts.filter(a=>a.status===af):S.alerts;
+  const crit=S.alerts.filter(a=>a.severity==='CRITICAL').length;
+  const high=S.alerts.filter(a=>a.severity==='HIGH').length;
+  const sv={1:'Low',2:'Medium',3:'High',4:'Critical'};
+  const sc={1:'#10b981',2:'#8b5cf6',3:'#f59e0b',4:'#e11d48'};
+  return <div className="page-enter">
+    <Grid cols={4} gap={14} style={{marginBottom:18}}>
+      <StatCard icon="📦" label="Packets" value={S.capturePackets>=1000?(S.capturePackets/1000).toFixed(1)+'K':S.capturePackets} sub="Captured" color="#2d6bff"/>
+      <StatCard icon="🚨" label="Total Alerts" value={S.alerts.length} sub="All time" color="#e11d48"/>
+      <StatCard icon="⚡" label="Crit+High" value={crit+high} sub="Needs attention" color="#f59e0b"/>
+      <StatCard icon="📋" label="Active Rules" value={S.idsRules.filter(r=>r.active).length} sub={`of ${S.idsRules.length} total`} color="#10b981"/>
+    </Grid>
+    <div style={{background:'#fff',border:'1.5px solid var(--border)',borderRadius:'var(--r-lg)',padding:'10px 16px',marginBottom:18,display:'flex',alignItems:'center',gap:18,flexWrap:'wrap',boxShadow:'var(--sh-xs)'}}>
+      <LivePulse active={S.captureRunning} label={S.captureRunning?'CAPTURING':'INACTIVE'}/>
+      {[{l:'Mode',v:'Promiscuous'},{l:'New Alerts',v:S.alerts.filter(a=>a.status==='new').length},{l:'Rules',v:`${S.idsRules.filter(r=>r.active).length} active`}].map(x=>(
+        <div key={x.l} style={{display:'flex',alignItems:'center',gap:5}}>
+          <span style={{fontSize:10,color:'var(--text-3)',fontFamily:'var(--font-mono)',textTransform:'uppercase'}}>{x.l}</span>
+          <span style={{fontSize:11,fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--text-1)',background:'#f1f5f9',padding:'1px 7px',borderRadius:'var(--r-sm)'}}>{x.v}</span>
+        </div>
+      ))}
+    </div>
+    <Grid cols={2} gap={16} style={{marginBottom:18}}>
+      <Panel title="Live Traffic Stream" subtitle="Real-time Pcap4J packets" actions={<LivePulse active={S.captureRunning}/>}>
+        <div style={{maxHeight:250,overflowY:'auto'}}>
+          {S.trafficFeed.length===0?<EmptyState icon="📡" title="No traffic yet" sub="Start capture to see live packets"/>
+          :S.trafficFeed.slice(0,30).map((t,i)=><FeedItem key={i} time={t.time} severity="low" badge={t.protocol} message={`${t.src} → ${t.dst}:${t.port} [${t.size}B]`}/>)}
+        </div>
+      </Panel>
+      <Panel title="IDS Alert Feed" subtitle="Rule matches & anomalies" actions={<span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'#e11d48',fontWeight:700}}>{S.alerts.filter(a=>a.status==='new').length} NEW</span>}>
+        <div style={{maxHeight:250,overflowY:'auto'}}>
+          {S.alerts.length===0?<EmptyState icon="🛡️" title="No alerts" sub="IDS monitoring…"/>
+          :S.alerts.slice(0,12).map(a=><FeedItem key={a.alertId} time={fmtT(a.timestamp)} severity={a.severity} badge={a.alertType} message={a.alertMessage}/>)}
+        </div>
+      </Panel>
+    </Grid>
+    <Panel title="Alert Registry" subtitle="Full alert history"
+      actions={<select value={af} onChange={e=>sAf(e.target.value)} style={{width:150,padding:'5px 9px',fontSize:12}}>
+        <option value="">All Status</option>
+        {['new','investigating','resolved','false_positive'].map(v=><option key={v} value={v}>{v.replace('_',' ')}</option>)}
+      </select>}>
+      <DataTable columns={[
+        {label:'Time',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:11}}>{fmtT(r.timestamp)}</span>},
+        {label:'Severity',render:r=><Badge severity={r.severity}/>},
+        {label:'Type',key:'alertType',mono:true,dim:true},
+        {label:'Source',render:r=><IPPill ip={r.sourceIp}/>},
+        {label:'Destination',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-2)'}}>{r.destinationIp}:{r.destinationPort}</span>},
+        {label:'Rule',key:'ruleName',maxWidth:'170px'},
+        {label:'Status',render:r=><Badge status={r.status}/>},
+        {label:'Actions',render:r=><div style={{display:'flex',gap:5}}>
+          <Btn size="xs" variant="ghost" onClick={()=>sVa(r)}>View</Btn>
+          {r.status==='new'&&<Btn size="xs" variant="amber" onClick={()=>{actions.updateAlertStatus(r.alertId,'investigating');onToast('Alert assigned','info');}}>Triage</Btn>}
+        </div>},
+      ]} rows={filtered} emptyText="No alerts match filter"/>
+    </Panel>
+    <div style={{marginTop:18}}>
+      <Panel title="IDS Rule Engine" subtitle={`${S.idsRules.filter(r=>r.active).length} active · Hot-reloads every 60s`}
+        actions={<Btn size="sm" variant="outline" onClick={()=>sRm(true)}>+ Add Rule</Btn>}>
+        <div style={{padding:'0 4px'}}>
+          {S.idsRules.map(r=><div key={r.ruleId} style={{display:'flex',alignItems:'center',gap:11,padding:'9px 14px',borderBottom:'1px solid #f1f5f9',transition:'background .1s'}}
+            onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'}
+            onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+            <Toggle value={r.active} onChange={()=>{actions.toggleRule(r.ruleId);onToast(`Rule ${r.active?'disabled':'enabled'}`,'info');}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:600,fontSize:13,color:'var(--text-1)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.ruleName}</div>
+              <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)',marginTop:1}}>{r.protocolPattern} · port {r.portPattern}</div>
+            </div>
+            <span style={{fontSize:10,fontFamily:'var(--font-mono)',fontWeight:700,color:sc[r.severity],background:sc[r.severity]+'15',padding:'2px 7px',borderRadius:99,border:`1px solid ${sc[r.severity]}33`,flexShrink:0}}>{sv[r.severity]}</span>
+            <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)',minWidth:52,textAlign:'right'}}>{r.matchCount} hits</span>
+            <Btn size="xs" variant="ghost" onClick={()=>{actions.deleteRule(r.ruleId);onToast('Rule deleted','warning');}} style={{color:'#e11d48',borderColor:'#fecdd3'}}>Delete</Btn>
+          </div>)}
+        </div>
+      </Panel>
+    </div>
+    <Modal open={!!va} onClose={()=>sVa(null)} title="Alert Detail"
+      footer={<><Btn variant="ghost" onClick={()=>sVa(null)}>Close</Btn>{va?.status==='new'&&<Btn variant="primary" onClick={()=>{actions.updateAlertStatus(va.alertId,'investigating');sVa(null);onToast('Updated','success');}}>Mark Investigating</Btn>}</>}>
+      {va&&<div>
+        <Grid cols={2} gap={10} style={{marginBottom:14}}>
+          {[{l:'Severity',v:<Badge severity={va.severity}/>},{l:'Type',v:<span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{va.alertType}</span>},{l:'Source',v:<IPPill ip={va.sourceIp}/>},{l:'Status',v:<Badge status={va.status}/>}].map(({l,v})=>(
+            <div key={l}><div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4,fontWeight:600}}>{l}</div>{v}</div>
+          ))}
+        </Grid>
+        <FormGroup label="Rule"><div style={{padding:'9px 12px',background:'#f8fafc',borderRadius:'var(--r-md)',border:'1px solid var(--border)',fontSize:13}}>{va.ruleName}</div></FormGroup>
+        <FormGroup label="Message"><div style={{padding:'9px 12px',background:'#fff1f2',borderRadius:'var(--r-md)',border:'1px solid #fecdd3',fontSize:13,color:'#7f1d1d',lineHeight:1.6}}>{va.alertMessage}</div></FormGroup>
+      </div>}
+    </Modal>
+    <Modal open={rm} onClose={()=>sRm(false)} title="Add IDS Rule"
+      footer={<><Btn variant="ghost" onClick={()=>sRm(false)}>Cancel</Btn><Btn variant="primary" onClick={()=>{if(!nr.ruleName.trim()){onToast('Name required','warning');return;}actions.addRule({...nr,active:true,matchCount:0,ruleId:Date.now()});sRm(false);sNr({ruleName:'',severity:2,portPattern:'',protocolPattern:'TCP',payloadPattern:''});onToast('Rule added','success');}}>Add Rule</Btn></>}>
+      <FormGroup label="Rule Name"><input value={nr.ruleName} onChange={e=>sNr(p=>({...p,ruleName:e.target.value}))} placeholder="e.g. Suspicious Outbound DNS"/></FormGroup>
+      <Grid cols={2} gap={12}>
+        <FormGroup label="Protocol"><select value={nr.protocolPattern} onChange={e=>sNr(p=>({...p,protocolPattern:e.target.value}))}>{['TCP','UDP','ICMP','any'].map(v=><option key={v}>{v}</option>)}</select></FormGroup>
+        <FormGroup label="Severity"><select value={nr.severity} onChange={e=>sNr(p=>({...p,severity:parseInt(e.target.value)}))}>
+          <option value={4}>Critical</option><option value={3}>High</option><option value={2}>Medium</option><option value={1}>Low</option>
+        </select></FormGroup>
+        <FormGroup label="Port Pattern"><input value={nr.portPattern} onChange={e=>sNr(p=>({...p,portPattern:e.target.value}))} placeholder="22 or 80,443 or any"/></FormGroup>
+        <FormGroup label="Payload Pattern"><input value={nr.payloadPattern} onChange={e=>sNr(p=>({...p,payloadPattern:e.target.value}))} placeholder="powershell, base64…"/></FormGroup>
+      </Grid>
+    </Modal>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE: WINDOWS EVENTS
+// ═══════════════════════════════════════════════════════════════════
+const CH_COLORS={Security:{bg:'#fff1f2',tx:'#be123c',br:'#fecdd3'},System:{bg:'#f0f9ff',tx:'#0369a1',br:'#bae6fd'},Application:{bg:'#f5f3ff',tx:'#6d28d9',br:'#ddd6fe'}};
+const EV_SEV={4625:{c:'#e11d48'},7045:{c:'#e11d48'},4688:{c:'#f59e0b'},4740:{c:'#e11d48'},4698:{c:'#e11d48'},4720:{c:'#8b5cf6'},4672:{c:'#f59e0b'}};
+function WindowsEventsPage({S}){
+  const idCounts={};
+  S.winEvents.forEach(e=>{idCounts[e.eventId]=(idCounts[e.eventId]||0)+1;});
+  const topIds=Object.entries(idCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  return <div className="page-enter">
+    <Grid cols={4} gap={14} style={{marginBottom:18}}>
+      <StatCard icon="📋" label="Total Events (24h)" value={S.winEvents.length} sub="All channels" color="#2d6bff"/>
+      <StatCard icon="🔐" label="Security Events" value={S.winEvents.filter(e=>e.securityRelevant).length} sub="Relevant" color="#7c3aed"/>
+      <StatCard icon="🚫" label="Failed Logins" value={S.winEvents.filter(e=>e.eventId===4625).length} sub="Event 4625" color="#e11d48"/>
+      <StatCard icon="⚡" label="Critical Events" value={S.winEvents.filter(e=>[7045,4740,4698].includes(e.eventId)).length} sub="Needs review" color="#f59e0b"/>
+    </Grid>
+    <Grid cols={2} gap={16} style={{marginBottom:18}}>
+      <Panel title="Live Event Stream" subtitle="Windows Event Log API · 5s polling">
+        <div style={{maxHeight:290,overflowY:'auto'}}>
+          {S.winEvents.length===0?<EmptyState icon="🪟" title="No events yet" sub="Windows Event reader polling…"/>
+          :S.winEvents.map(e=>{
+            const ch=CH_COLORS[e.channel]||CH_COLORS.Application;
+            const ec=EV_SEV[e.eventId]||{c:'#94a3b8'};
+            return <div key={e.logId} style={{display:'flex',gap:9,alignItems:'flex-start',padding:'7px 14px',borderBottom:'1px solid #f1f5f9'}}>
+              <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)',flexShrink:0,marginTop:1,minWidth:54}}>{fmtT(e.eventTime)}</span>
+              <span style={{fontSize:10,fontFamily:'var(--font-mono)',fontWeight:700,padding:'2px 6px',borderRadius:99,background:ch.bg,color:ch.tx,border:`1px solid ${ch.br}`,flexShrink:0}}>{e.channel}</span>
+              <span style={{fontFamily:'var(--font-mono)',fontSize:11,fontWeight:700,color:ec.c,flexShrink:0,minWidth:34}}>{e.eventId}</span>
+              <span style={{fontSize:12,color:'var(--text-2)',lineHeight:1.5,overflow:'hidden'}}>{e.message.substring(0,85)}{e.message.length>85?'…':''}</span>
+              {e.securityRelevant&&<span style={{fontSize:9,fontFamily:'var(--font-mono)',fontWeight:700,color:'#be123c',background:'#fff1f2',border:'1px solid #fecdd3',padding:'2px 5px',borderRadius:99,flexShrink:0}}>SEC</span>}
+            </div>;
+          })}
+        </div>
+      </Panel>
+      <Panel title="Top Security Event IDs" subtitle="Frequency analysis">
+        {topIds.length===0?<EmptyState icon="📊" title="No data" sub="Events appear after polling"/>
+        :<div>{topIds.map(([id,cnt])=>{
+          const ec=EV_SEV[+id]||{c:'#94a3b8'};
+          const pct=(cnt/(topIds[0]?.[1]||1))*100;
+          return <div key={id} style={{padding:'9px 14px',borderBottom:'1px solid #f1f5f9'}}>
+            <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:4}}>
+              <span style={{fontFamily:'var(--font-mono)',fontSize:12,fontWeight:700,color:ec.c,minWidth:36}}>{id}</span>
+              <span style={{flex:1,fontSize:12,color:'var(--text-2)'}}>{EV_NAMES[+id]||'Unknown'}</span>
+              <span style={{fontFamily:'var(--font-mono)',fontSize:11,fontWeight:700,color:'var(--text-1)'}}>{cnt}</span>
+            </div>
+            <ProgressBar value={pct} max={100} color={ec.c} height={3}/>
+          </div>;
+        })}</div>}
+      </Panel>
+    </Grid>
+    <Panel title="Event Log Table" subtitle="Full Windows Event Log entries">
+      <DataTable columns={[
+        {label:'Time',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:11}}>{fmtT(r.eventTime)}</span>},
+        {label:'Channel',render:r=>{const c=CH_COLORS[r.channel]||CH_COLORS.Application;return<span style={{fontSize:10,fontFamily:'var(--font-mono)',fontWeight:700,padding:'2px 6px',borderRadius:99,background:c.bg,color:c.tx,border:`1px solid ${c.br}`}}>{r.channel}</span>;}},
+        {label:'Event ID',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:12,fontWeight:700,color:(EV_SEV[r.eventId]||{c:'#94a3b8'}).c}}>{r.eventId}</span>},
+        {label:'Level',render:r=><span style={{fontSize:11,color:'var(--text-2)'}}>{r.level}</span>},
+        {label:'Computer',key:'computerName',mono:true,dim:true},
+        {label:'Message',render:r=><span style={{fontSize:12,color:'var(--text-2)'}}>{r.message.substring(0,70)}{r.message.length>70?'…':''}</span>,maxWidth:'250px'},
+        {label:'Security',render:r=>r.securityRelevant?<span style={{fontSize:9,fontFamily:'var(--font-mono)',fontWeight:700,color:'#be123c',background:'#fff1f2',border:'1px solid #fecdd3',padding:'2px 5px',borderRadius:99}}>⚠ YES</span>:<span style={{color:'var(--text-3)',fontSize:12}}>—</span>},
+      ]} rows={S.winEvents} emptyText="No events yet"/>
+    </Panel>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE: MALWARE
+// ═══════════════════════════════════════════════════════════════════
+function MalwarePage({S,actions,onToast}){
+  const [fp,sFp]=useState('');
+  const [eng,sEng]=useState('HEURISTIC+YARA');
+  const [sc,sSc]=useState(false);
+  const [res,sRes]=useState(null);
+  const inf=S.malwareScans.filter(s=>s.scanResult==='infected').length;
+  const sus=S.malwareScans.filter(s=>s.scanResult==='suspicious').length;
+  const cln=S.malwareScans.filter(s=>s.scanResult==='clean').length;
+  const qua=S.malwareScans.filter(s=>s.quarantined).length;
+  const doScan=()=>{
+    if(!fp.trim()){onToast('Enter a file path','warning');return;}
+    sSc(true);sRes(null);
+    setTimeout(()=>{const r=actions.scanFile(fp,eng);sRes(r);sSc(false);
+      if(r.scanResult==='infected')onToast('🚨 MALWARE: '+(r.threatName||'Unknown'),'critical');
+      else if(r.scanResult==='suspicious')onToast('⚠ Suspicious file detected','warning');
+      else onToast('✓ File is clean','success');
+    },1800);
+  };
+  const rc={infected:{bg:'#fff1f2',br:'#fecdd3',tx:'#be123c',ic:'☠'},suspicious:{bg:'#fffbeb',br:'#fde68a',tx:'#b45309',ic:'⚠'},clean:{bg:'#ecfdf5',br:'#a7f3d0',tx:'#047857',ic:'✓'}};
+  return <div className="page-enter">
+    <Grid cols={4} gap={14} style={{marginBottom:18}}>
+      <StatCard icon="☠" label="Infected" value={inf} sub="Confirmed threats" color="#e11d48"/>
+      <StatCard icon="⚠" label="Suspicious" value={sus} sub="Needs review" color="#f59e0b"/>
+      <StatCard icon="✓" label="Clean" value={cln} sub="No threats" color="#10b981"/>
+      <StatCard icon="🔒" label="Quarantined" value={qua} sub="Isolated" color="#7c3aed"/>
+    </Grid>
+    <Grid cols={2} gap={16} style={{marginBottom:18}}>
+      <Panel title="Scan File" subtitle="YARA · VirusTotal · Heuristic">
+        <div style={{padding:18}}>
+          <FormGroup label="File Path"><input value={fp} onChange={e=>sFp(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doScan()} placeholder="C:\Users\Admin\Downloads\suspicious.exe"/></FormGroup>
+          <FormGroup label="Scan Engine"><select value={eng} onChange={e=>sEng(e.target.value)}>
+            <option value="HEURISTIC+YARA">Heuristic + YARA (Default)</option>
+            <option value="VIRUSTOTAL">VirusTotal Hash Lookup</option>
+            <option value="FULL">Full Scan (All Engines)</option>
+          </select></FormGroup>
+          <Btn variant="primary" onClick={doScan} disabled={sc} style={{width:'100%',justifyContent:'center',padding:'10px 0'}}>{sc?<><span style={{animation:'spin 1s linear infinite',display:'inline-block'}}>⟳</span> Scanning…</>:'🔍 Scan File'}</Btn>
+          {res&&(()=>{const c=rc[res.scanResult]||rc.clean;return <div style={{background:c.bg,border:`1.5px solid ${c.br}`,borderRadius:'var(--r-lg)',padding:14,marginTop:14}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+              <span style={{fontSize:22}}>{c.ic}</span>
+              <div><div style={{fontFamily:'var(--font-display)',fontWeight:800,fontSize:15,color:c.tx}}>{res.scanResult.toUpperCase()}</div>
+              <div style={{fontSize:12,color:c.tx,opacity:.8}}>{res.fileName}</div></div>
+            </div>
+            {[{l:'SHA-256',v:res.fileHash?.substring(0,20)+'…',m:true},{l:'VT Positives',v:`${res.virustotalPositives}/${res.virustotalTotal}`,m:true},res.threatName&&{l:'Threat',v:res.threatName},res.quarantined&&{l:'Quarantine',v:'✓ Moved to quarantine'}].filter(Boolean).map(x=>(
+              <div key={x.l} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderTop:`1px solid ${c.br}`}}>
+                <span style={{fontSize:12,color:c.tx,opacity:.8,fontWeight:500}}>{x.l}</span>
+                <span style={{fontSize:12,color:c.tx,fontFamily:x.m?'var(--font-mono)':'var(--font-body)',fontWeight:600}}>{x.v}</span>
+              </div>
+            ))}
+          </div>;})()}
+        </div>
+      </Panel>
+      <Panel title="Quarantine Vault" subtitle="Isolated malicious files">
+        {S.malwareScans.filter(s=>s.quarantined).length===0?<EmptyState icon="🔒" title="Vault is empty" sub="Infected files appear here"/>
+        :S.malwareScans.filter(s=>s.quarantined).map(s=><div key={s.scanId} style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',padding:'11px 15px',borderBottom:'1px solid #f1f5f9'}}>
+          <div>
+            <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:3}}><span style={{fontSize:13}}>🔒</span><span style={{fontWeight:600,fontSize:13}}>{s.fileName}</span></div>
+            <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)'}}>{s.fileHash?.substring(0,18)}…</div>
+            {s.threatName&&<div style={{fontSize:12,color:'#be123c',marginTop:2,fontWeight:500}}>{s.threatName}</div>}
+          </div>
+          <div style={{flexShrink:0,marginLeft:10}}>
+            <Badge status="infected" size="xs"/>
+            <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)',marginTop:3,textAlign:'right'}}>VT:{s.virustotalPositives}/{s.virustotalTotal}</div>
+          </div>
+        </div>)}
+      </Panel>
+    </Grid>
+    <Panel title="Scan History" subtitle="All file scans with results">
+      <DataTable columns={[
+        {label:'Time',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-3)'}}>{fmtDT(r.scanTime)}</span>},
+        {label:'File',render:r=><span style={{fontWeight:600,fontSize:12}}>{r.fileName}</span>},
+        {label:'SHA-256',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)'}}>{r.fileHash?.substring(0,14)}…</span>},
+        {label:'Engine',render:r=><span style={{fontSize:11,color:'var(--text-2)'}}>{r.scanEngine}</span>},
+        {label:'Result',render:r=><Badge status={r.scanResult}/>},
+        {label:'Threat',render:r=>r.threatName?<span style={{fontSize:12,color:'#be123c',fontWeight:500}}>{r.threatName}</span>:<span style={{color:'var(--text-3)'}}>—</span>},
+        {label:'VT',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:11,fontWeight:700,color:r.virustotalPositives>0?'#e11d48':'#10b981'}}>{r.virustotalPositives}/{r.virustotalTotal}</span>},
+        {label:'🔒',render:r=>r.quarantined?<span style={{fontSize:9,fontFamily:'var(--font-mono)',fontWeight:700,color:'#be123c',background:'#fff1f2',border:'1px solid #fecdd3',padding:'2px 5px',borderRadius:99}}>YES</span>:<span style={{color:'var(--text-3)'}}>—</span>},
+      ]} rows={S.malwareScans} emptyText="No scans yet"/>
+    </Panel>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE: INCIDENTS
+// ═══════════════════════════════════════════════════════════════════
+const STTS=['open','investigating','contained','resolved','closed'];
+function IncidentsPage({S,actions,onToast}){
+  const [sf,sSf]=useState('');
+  const [cm,sCm]=useState(false);
+  const [vi,sVi]=useState(null);
+  const [nt,sNt]=useState('');
+  const [ni,sNi]=useState({title:'',description:'',severity:'high',assignedTo:'',affectedAssets:''});
+  const filt=sf?S.incidents.filter(i=>i.status===sf):S.incidents;
+  return <div className="page-enter">
+    <Grid cols={4} gap={14} style={{marginBottom:18}}>
+      <StatCard icon="🔴" label="Open" value={S.incidents.filter(i=>i.status==='open').length} sub="Awaiting action" color="#e11d48"/>
+      <StatCard icon="🔎" label="Investigating" value={S.incidents.filter(i=>i.status==='investigating').length} sub="In progress" color="#f59e0b"/>
+      <StatCard icon="🛡" label="Contained" value={S.incidents.filter(i=>i.status==='contained').length} sub="Isolated" color="#8b5cf6"/>
+      <StatCard icon="✅" label="Resolved" value={S.incidents.filter(i=>['resolved','closed'].includes(i.status)).length} sub="Closed" color="#10b981"/>
+    </Grid>
+    <Panel title="Incident Register" subtitle={`${S.incidents.length} total incidents`}
+      actions={<div style={{display:'flex',gap:8}}>
+        <select value={sf} onChange={e=>sSf(e.target.value)} style={{width:140,padding:'5px 9px',fontSize:12}}>
+          <option value="">All Status</option>
+          {STTS.map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+        </select>
+        <Btn size="sm" variant="primary" onClick={()=>sCm(true)}>+ Create Incident</Btn>
+      </div>}>
+      <DataTable columns={[
+        {label:'ID',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'#2d6bff',fontWeight:700}}>{r.incidentNumber}</span>},
+        {label:'Title',render:r=><span style={{fontWeight:600,fontSize:13}}>{r.title}</span>,maxWidth:'200px'},
+        {label:'Severity',render:r=><Badge severity={r.severity}/>},
+        {label:'Status',render:r=><Badge status={r.status}/>},
+        {label:'Assigned',key:'assignedTo',dim:true},
+        {label:'Assets',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'#1340b8',background:'#f0f5ff',padding:'2px 7px',borderRadius:4}}>{r.affectedAssets}</span>},
+        {label:'Created',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-3)'}}>{fmtDT(r.createdAt)}</span>},
+        {label:'Actions',render:r=><div style={{display:'flex',gap:5}}>
+          <Btn size="xs" variant="ghost" onClick={()=>sVi(r)}>View</Btn>
+          <Btn size="xs" variant="amber" onClick={()=>{const nx=STTS[STTS.indexOf(r.status)+1]||'closed';actions.updateIncident(r.incidentId,nx);onToast(`${r.incidentNumber} → ${nx}`,'success');}}>Update</Btn>
+        </div>},
+      ]} rows={filt} emptyText="No incidents"/>
+    </Panel>
+    <Modal open={!!vi} onClose={()=>sVi(null)} title={vi?.incidentNumber||'Incident'} width={560}
+      footer={<><Btn variant="ghost" onClick={()=>sVi(null)}>Close</Btn>{vi&&!['resolved','closed'].includes(vi.status)&&<Btn variant="primary" onClick={()=>{const nx=STTS[STTS.indexOf(vi.status)+1]||'closed';actions.updateIncident(vi.incidentId,nx);sVi(p=>p?{...p,status:nx}:p);onToast(`→ ${nx}`,'success');}}>Advance Status →</Btn>}</>}>
+      {vi&&<div>
+        <Grid cols={3} gap={10} style={{marginBottom:14}}>
+          {[{l:'Severity',v:<Badge severity={vi.severity}/>},{l:'Status',v:<Badge status={vi.status}/>},{l:'Assigned',v:<span style={{fontWeight:600,fontSize:13}}>{vi.assignedTo||'—'}</span>}].map(({l,v})=>(
+            <div key={l}><div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4,fontWeight:600}}>{l}</div>{v}</div>
+          ))}
+        </Grid>
+        <div style={{fontFamily:'var(--font-display)',fontWeight:700,fontSize:15,color:'var(--text-1)',marginBottom:10}}>{vi.title}</div>
+        {vi.description&&<div style={{padding:'11px 13px',background:'#f8fafc',borderRadius:'var(--r-md)',border:'1px solid var(--border)',fontSize:13,color:'var(--text-2)',marginBottom:13,lineHeight:1.6}}>{vi.description}</div>}
+        <div style={{marginTop:13,borderTop:'1.5px solid var(--border)',paddingTop:13}}>
+          <FormGroup label="Add Note"><textarea value={nt} onChange={e=>sNt(e.target.value)} placeholder="Investigation notes…"/></FormGroup>
+          <Btn size="sm" variant="outline" onClick={()=>{if(!nt.trim())return;sNt('');onToast('Note added to timeline','success');}}>Add Note</Btn>
+        </div>
+      </div>}
+    </Modal>
+    <Modal open={cm} onClose={()=>sCm(false)} title="Create Incident"
+      footer={<><Btn variant="ghost" onClick={()=>sCm(false)}>Cancel</Btn><Btn variant="primary" onClick={()=>{if(!ni.title.trim()){onToast('Title required','warning');return;}actions.createIncident(ni);sCm(false);sNi({title:'',description:'',severity:'high',assignedTo:'',affectedAssets:''});onToast('Incident created','success');}}>Create</Btn></>}>
+      <FormGroup label="Title"><input value={ni.title} onChange={e=>sNi(p=>({...p,title:e.target.value}))} placeholder="Brief description"/></FormGroup>
+      <Grid cols={2} gap={12}>
+        <FormGroup label="Severity"><select value={ni.severity} onChange={e=>sNi(p=>({...p,severity:e.target.value}))}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></FormGroup>
+        <FormGroup label="Assigned To"><input value={ni.assignedTo} onChange={e=>sNi(p=>({...p,assignedTo:e.target.value}))} placeholder="analyst1"/></FormGroup>
+      </Grid>
+      <FormGroup label="Affected Assets"><input value={ni.affectedAssets} onChange={e=>sNi(p=>({...p,affectedAssets:e.target.value}))} placeholder="192.168.1.1, server01"/></FormGroup>
+      <FormGroup label="Description"><textarea value={ni.description} onChange={e=>sNi(p=>({...p,description:e.target.value}))} placeholder="Incident details, IOCs, affected systems…"/></FormGroup>
+    </Modal>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE: VULNERABILITY
+// ═══════════════════════════════════════════════════════════════════
+function VulnPage({S,actions,onToast}){
+  const [sm,sSm]=useState(false);
+  const [ns,sNs]=useState({name:'',type:'network',targets:''});
+  const crit=S.vulnFindings.filter(f=>f.severity==='critical').length;
+  const high=S.vulnFindings.filter(f=>f.severity==='high').length;
+  const med=S.vulnFindings.filter(f=>f.severity==='medium').length;
+  const low=S.vulnFindings.filter(f=>['low','info'].includes(f.severity)).length;
+  const cvC=s=>s>=9?'#e11d48':s>=7?'#f59e0b':s>=4?'#8b5cf6':'#10b981';
+  return <div className="page-enter">
+    <Grid cols={4} gap={14} style={{marginBottom:18}}>
+      <StatCard icon="🔴" label="Critical" value={crit} sub="CVSS ≥ 9.0" color="#e11d48"/>
+      <StatCard icon="🟠" label="High" value={high} sub="CVSS 7–8.9" color="#f59e0b"/>
+      <StatCard icon="🟣" label="Medium" value={med} sub="CVSS 4–6.9" color="#8b5cf6"/>
+      <StatCard icon="🟢" label="Low/Info" value={low} sub="CVSS < 4.0" color="#10b981"/>
+    </Grid>
+    <Grid cols={2} gap={16} style={{marginBottom:18}}>
+      <Panel title="Risk Summary" subtitle="Open vulnerability breakdown">
+        <div style={{padding:18}}>
+          {[{l:'Critical',c:crit,cl:'#e11d48'},{l:'High',c:high,cl:'#f59e0b'},{l:'Medium',c:med,cl:'#8b5cf6'},{l:'Low',c:low,cl:'#10b981'}].map(s=>(
+            <div key={s.l} style={{marginBottom:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                <div style={{display:'flex',alignItems:'center',gap:7}}><span style={{width:7,height:7,borderRadius:'50%',background:s.cl,display:'inline-block'}}/><span style={{fontSize:13,fontWeight:500}}>{s.l}</span></div>
+                <span style={{fontFamily:'var(--font-mono)',fontSize:12,fontWeight:700,color:s.cl}}>{s.c}</span>
+              </div>
+              <ProgressBar value={s.c} max={S.vulnFindings.length||1} color={s.cl} height={4}/>
+            </div>
+          ))}
+        </div>
+      </Panel>
+      <Panel title="Scan History" subtitle="Nmap · OWASP ZAP" actions={<Btn size="sm" variant="primary" onClick={()=>sSm(true)}>+ New Scan</Btn>}>
+        {S.vulnScans.length===0?<EmptyState icon="🔍" title="No scans yet" sub="Click + New Scan to start"/>
+        :<div>{S.vulnScans.map(s=><div key={s.scanId||s.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 15px',borderBottom:'1px solid #f1f5f9'}}>
+          <div>
+            <div style={{fontWeight:600,fontSize:13}}>{s.scanName||s.name}</div>
+            <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)',marginTop:1}}>{s.scanType} · {s.targets}</div>
+          </div>
+          <Badge status={s.scanStatus||s.status}/>
+        </div>)}</div>}
+      </Panel>
+    </Grid>
+    <Panel title="Vulnerability Findings" subtitle="All discovered vulnerabilities">
+      <DataTable columns={[
+        {label:'Host',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:11,background:'#f0f5ff',color:'#1340b8',padding:'2px 8px',borderRadius:4,border:'1px solid #c1d4ff'}}>{r.hostIp}</span>},
+        {label:'Vulnerability',render:r=><span style={{fontWeight:600,fontSize:12}}>{r.vulnerabilityName}</span>,maxWidth:'220px'},
+        {label:'CVE',render:r=>r.cveId?<span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'#7c3aed',background:'#f5f3ff',padding:'2px 7px',borderRadius:4,border:'1px solid #ddd6fe'}}>{r.cveId}</span>:<span style={{color:'var(--text-3)'}}>—</span>},
+        {label:'CVSS',render:r=>r.cvssScore?<span style={{fontFamily:'var(--font-mono)',fontSize:12,fontWeight:700,color:cvC(r.cvssScore)}}>{r.cvssScore}</span>:<span style={{color:'var(--text-3)'}}>—</span>},
+        {label:'Severity',render:r=><Badge severity={r.severity}/>},
+        {label:'Status',render:r=><Badge status={r.status?.replace('_','-')||'open'}/>},
+        {label:'Actions',render:r=><div style={{display:'flex',gap:5}}>
+          {r.status==='open'&&<Btn size="xs" variant="amber" onClick={()=>{actions.updateFinding(r.findingId,'in_progress');onToast('Finding assigned','info');}}>Assign</Btn>}
+        </div>},
+      ]} rows={S.vulnFindings} emptyText="No findings — run a scan"/>
+    </Panel>
+    <Modal open={sm} onClose={()=>sSm(false)} title="New Vulnerability Scan"
+      footer={<><Btn variant="ghost" onClick={()=>sSm(false)}>Cancel</Btn><Btn variant="primary" onClick={()=>{if(!ns.name.trim()||!ns.targets.trim()){onToast('Name and targets required','warning');return;}actions.createScan(ns);sSm(false);sNs({name:'',type:'network',targets:''});onToast('Scan started: '+ns.targets,'info');}}>Start Scan</Btn></>}>
+      <FormGroup label="Scan Name"><input value={ns.name} onChange={e=>sNs(p=>({...p,name:e.target.value}))} placeholder="e.g. Internal Network Q1 Scan"/></FormGroup>
+      <Grid cols={2} gap={12}>
+        <FormGroup label="Type"><select value={ns.type} onChange={e=>sNs(p=>({...p,type:e.target.value}))}><option value="network">Network (Nmap)</option><option value="port">Port Scan</option><option value="web">Web (OWASP ZAP)</option><option value="full">Full Scan</option></select></FormGroup>
+        <FormGroup label="Targets"><input value={ns.targets} onChange={e=>sNs(p=>({...p,targets:e.target.value}))} placeholder="192.168.1.0/24"/></FormGroup>
+      </Grid>
+    </Modal>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE: HONEYPOT
+// ═══════════════════════════════════════════════════════════════════
+const HP_ICONS={ssh:'🔐',http:'🌐',ftp:'📁',smtp:'✉',rdp:'🖥',telnet:'⌨'};
+function HoneypotPage({S,actions,onToast}){
+  const [dm,sDm]=useState(false);
+  const [nh,sNh]=useState({name:'',type:'ssh',ip:'',port:'2222'});
+  const active=S.honeypots.filter(h=>h.active).length;
+  const canvRef=useRef(null);
+  const aRef=useRef(0);
+  const rRef=useRef(null);
+  useEffect(()=>{
+    const cv=canvRef.current;if(!cv)return;
+    const ctx=cv.getContext('2d');
+    const W=cv.width,H=cv.height,cx=W/2,cy=H/2,r=Math.min(W,H)/2-18;
+    const dots=S.attackers.map((a,i)=>{const ang=(i*2.4+.8)%(Math.PI*2),d=r*(.4+(i%3)*.2);return{x:cx+Math.cos(ang)*d,y:cy+Math.sin(ang)*d,c:a.threatLevel==='critical'?'#e11d48':a.threatLevel==='high'?'#f59e0b':'#8b5cf6'};});
+    const draw=()=>{
+      ctx.clearRect(0,0,W,H);
+      [r,r*.66,r*.33].forEach(rd=>{ctx.beginPath();ctx.arc(cx,cy,rd,0,Math.PI*2);ctx.strokeStyle='#e2e8f0';ctx.lineWidth=1;ctx.stroke();});
+      ctx.beginPath();ctx.moveTo(cx,cy-r);ctx.lineTo(cx,cy+r);ctx.moveTo(cx-r,cy);ctx.lineTo(cx+r,cy);ctx.strokeStyle='#f1f5f9';ctx.lineWidth=1;ctx.stroke();
+      ctx.beginPath();ctx.arc(cx,cy,5,0,Math.PI*2);ctx.fillStyle='#2d6bff';ctx.fill();
+      ctx.fillStyle='#2d6bff';ctx.font="bold 8px 'DM Mono',monospace";ctx.textAlign='center';ctx.fillText('SOC',cx,cy+14);
+      const a=aRef.current;
+      const gd=ctx.createLinearGradient(cx,cy,cx+Math.cos(a)*r,cy+Math.sin(a)*r);
+      gd.addColorStop(0,'rgba(45,107,255,.2)');gd.addColorStop(1,'rgba(45,107,255,0)');
+      ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a-Math.PI/6,a);ctx.closePath();ctx.fillStyle=gd;ctx.fill();
+      ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);ctx.strokeStyle='rgba(45,107,255,.7)';ctx.lineWidth=1.5;ctx.stroke();
+      dots.forEach(d=>{ctx.beginPath();ctx.arc(d.x,d.y,5,0,Math.PI*2);ctx.fillStyle=d.c;ctx.fill();ctx.beginPath();ctx.arc(d.x,d.y,8,0,Math.PI*2);ctx.strokeStyle=d.c+'66';ctx.lineWidth=1;ctx.stroke();});
+      aRef.current=(a+.018)%(Math.PI*2);
+      rRef.current=requestAnimationFrame(draw);
+    };
+    draw();
+    return()=>{if(rRef.current)cancelAnimationFrame(rRef.current);};
+  },[S.attackers]);
+  return <div className="page-enter">
+    <Grid cols={4} gap={14} style={{marginBottom:18}}>
+      <StatCard icon="🍯" label="Active Traps" value={active} sub="Deployed" color="#2d6bff"/>
+      <StatCard icon="💥" label="Interactions" value={S.honeypots.reduce((s,h)=>s+(h.interactions||0),0)} sub="Total contacts" color="#e11d48"/>
+      <StatCard icon="👤" label="Attackers Profiled" value={S.attackers.length} sub="Unique IPs" color="#f59e0b"/>
+      <StatCard icon="🎯" label="Critical Threats" value={S.attackers.filter(a=>a.threatLevel==='critical').length} sub="High-risk actors" color="#7c3aed"/>
+    </Grid>
+    <Grid cols={2} gap={16} style={{marginBottom:18}}>
+      <Panel title="Deployed Honeypots" subtitle="Active deception infrastructure" actions={<Btn size="sm" variant="primary" onClick={()=>sDm(true)}>+ Deploy</Btn>}>
+        {S.honeypots.length===0?<EmptyState icon="🍯" title="No honeypots" sub="Deploy traps to lure attackers"/>
+        :S.honeypots.map(hp=><div key={hp.honeypotId} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 15px',borderBottom:'1px solid #f1f5f9'}}>
+          <div style={{display:'flex',alignItems:'center',gap:11}}>
+            <div style={{width:36,height:36,borderRadius:'var(--r-md)',background:hp.active?'#ecfdf5':'#f1f5f9',border:`1.5px solid ${hp.active?'#a7f3d0':'#e2e8f0'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,flexShrink:0}}>{HP_ICONS[hp.honeypotType]||'🍯'}</div>
+            <div>
+              <div style={{fontWeight:700,fontSize:13}}>{hp.honeypotName}</div>
+              <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)',marginTop:1}}>{hp.honeypotType.toUpperCase()} · {hp.ipAddress}:{hp.port} · {hp.interactions||0} interactions</div>
+            </div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:7}}>
+            <Badge status={hp.active?'active':'inactive'} size="xs"/>
+            <Btn size="xs" variant={hp.active?'ghost':'success'} onClick={()=>{actions.toggleHoneypot(hp.honeypotId);onToast(hp.honeypotName+(hp.active?' deactivated':' activated'),hp.active?'warning':'success');}}>{hp.active?'Disable':'Enable'}</Btn>
+          </div>
+        </div>)}
+      </Panel>
+      <Panel title="Interaction Radar" subtitle="Real-time attacker positions">
+        <div style={{padding:'16px 0',textAlign:'center'}}>
+          <canvas ref={canvRef} width={250} height={250} style={{display:'block',margin:'0 auto'}}/>
+          <div style={{display:'flex',gap:14,justifyContent:'center',marginTop:12}}>
+            {['critical','high','medium'].map(l=><div key={l} style={{display:'flex',alignItems:'center',gap:4}}>
+              <span style={{width:7,height:7,borderRadius:'50%',background:l==='critical'?'#e11d48':l==='high'?'#f59e0b':'#8b5cf6',display:'inline-block'}}/>
+              <span style={{fontSize:11,fontFamily:'var(--font-mono)',color:'var(--text-2)',fontWeight:600,textTransform:'capitalize'}}>{l}</span>
+            </div>)}
+          </div>
+        </div>
+      </Panel>
+    </Grid>
+    <Panel title="Attacker Profiles" subtitle="Adversary intelligence">
+      <DataTable columns={[
+        {label:'Attacker IP',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:11,background:'#fff1f2',color:'#be123c',padding:'2px 8px',borderRadius:4,border:'1px solid #fecdd3',fontWeight:700}}>{r.ip}</span>},
+        {label:'Threat Level',render:r=>{const c=r.threatLevel==='critical'?{bg:'#fff1f2',tx:'#be123c',br:'#fecdd3'}:r.threatLevel==='high'?{bg:'#fffbeb',tx:'#b45309',br:'#fde68a'}:{bg:'#f5f3ff',tx:'#6d28d9',br:'#ddd6fe'};return<span style={{fontFamily:'var(--font-mono)',fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:99,background:c.bg,color:c.tx,border:`1px solid ${c.br}`,textTransform:'uppercase'}}>{r.threatLevel}</span>;}},
+        {label:'Country',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>🌍 {r.country}</span>},
+        {label:'Interactions',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:13,fontWeight:700}}>{r.interactions}</span>},
+        {label:'First Seen',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-3)'}}>{fmtDT(r.firstSeen)}</span>},
+        {label:'Last Seen',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-3)'}}>{fmtDT(r.lastSeen)}</span>},
+      ]} rows={S.attackers} emptyText="No attackers profiled yet"/>
+    </Panel>
+    <Modal open={dm} onClose={()=>sDm(false)} title="Deploy Honeypot"
+      footer={<><Btn variant="ghost" onClick={()=>sDm(false)}>Cancel</Btn><Btn variant="primary" onClick={()=>{if(!nh.name.trim()||!nh.ip.trim()){onToast('Name and IP required','warning');return;}actions.deployHoneypot({...nh,port:parseInt(nh.port)||2222});sDm(false);sNh({name:'',type:'ssh',ip:'',port:'2222'});onToast('Honeypot deployed: '+nh.name,'success');}}>Deploy</Btn></>}>
+      <FormGroup label="Honeypot Name"><input value={nh.name} onChange={e=>sNh(p=>({...p,name:e.target.value}))} placeholder="SSH-Trap-02"/></FormGroup>
+      <Grid cols={2} gap={12}>
+        <FormGroup label="Service Type"><select value={nh.type} onChange={e=>sNh(p=>({...p,type:e.target.value}))}>{['ssh','http','ftp','smtp','rdp','telnet'].map(t=><option key={t} value={t}>{t.toUpperCase()}</option>)}</select></FormGroup>
+        <FormGroup label="Port"><input type="number" value={nh.port} onChange={e=>sNh(p=>({...p,port:e.target.value}))} placeholder="2222"/></FormGroup>
+      </Grid>
+      <FormGroup label="Bind IP"><input value={nh.ip} onChange={e=>sNh(p=>({...p,ip:e.target.value}))} placeholder="192.168.1.210"/></FormGroup>
+    </Modal>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE: REPORTS
+// ═══════════════════════════════════════════════════════════════════
+const RPLS=[
+  {id:1,name:'Security Summary',     icon:'🛡',desc:'24-hour threat overview'},
+  {id:2,name:'Compliance Report',    icon:'📋',desc:'Audit-ready log exports'},
+  {id:3,name:'Executive Dashboard',  icon:'📊',desc:'High-level KPIs for C-suite'},
+  {id:4,name:'Vulnerability Report', icon:'🔍',desc:'Findings with CVSS scores'},
+  {id:5,name:'Incident Post-Mortem', icon:'🔥',desc:'Timeline and forensics'},
+];
+function ReportsPage({S,onToast}){
+  const [gen,sGen]=useState([]);
+  const [gng,sGng]=useState(null);
+  const [fmt,sFmt]=useState('pdf');
+  const generate=t=>{
+    sGng(t.id);onToast('Generating '+t.name+'…','info');
+    setTimeout(()=>{
+      sGen(p=>[{id:Date.now(),name:`${t.name}_${new Date().toISOString().slice(0,10)}.${fmt}`,type:t.type||'security',format:fmt,size:Math.floor(Math.random()*900+100)+' KB',at:new Date().toISOString()},...p]);
+      sGng(null);onToast(t.name+' generated','success');
+    },2000);
+  };
+  const FC={pdf:{bg:'#fff1f2',tx:'#be123c',br:'#fecdd3'},html:{bg:'#f0f9ff',tx:'#0369a1',br:'#bae6fd'},csv:{bg:'#ecfdf5',tx:'#047857',br:'#a7f3d0'},json:{bg:'#f5f3ff',tx:'#6d28d9',br:'#ddd6fe'}};
+  return <div className="page-enter">
+    <Grid cols={4} gap={14} style={{marginBottom:18}}>
+      <StatCard icon="🚨" label="Alerts (24h)" value={S.alerts.length} color="#e11d48"/>
+      <StatCard icon="🔥" label="Open Incidents" value={S.incidents.filter(i=>['open','investigating'].includes(i.status)).length} color="#f59e0b"/>
+      <StatCard icon="☠" label="Infected Files" value={S.malwareScans.filter(s=>s.scanResult==='infected').length} color="#7c3aed"/>
+      <StatCard icon="🔴" label="Critical Vulns" value={S.vulnFindings.filter(f=>f.severity==='critical').length} color="#2d6bff"/>
+    </Grid>
+    <Grid cols={2} gap={16}>
+      <Panel title="Report Templates" subtitle="Click Generate to create">
+        <div style={{padding:'0 4px'}}>
+          <div style={{padding:'11px 13px 3px'}}>
+            <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:7,fontWeight:600}}>Output Format</div>
+            <div style={{display:'flex',gap:7,marginBottom:4}}>
+              {['pdf','html','csv','json'].map(f=>{const c=FC[f];return<button key={f} onClick={()=>sFmt(f)} style={{padding:'3px 11px',borderRadius:99,border:`1.5px solid ${fmt===f?c.tx:'#e2e8f0'}`,background:fmt===f?c.bg:'transparent',color:fmt===f?c.tx:'var(--text-3)',fontFamily:'var(--font-mono)',fontSize:10,fontWeight:700,cursor:'pointer',textTransform:'uppercase'}}>  {f}</button>;})}
+            </div>
+          </div>
+          {RPLS.map(t=><div key={t.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 13px',borderTop:'1.5px solid var(--border)',transition:'background .1s'}}
+            onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'}
+            onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+            <div style={{display:'flex',gap:11,alignItems:'center'}}>
+              <div style={{width:34,height:34,borderRadius:'var(--r-md)',background:'#f0f5ff',border:'1.5px solid #c1d4ff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,flexShrink:0}}>{t.icon}</div>
+              <div><div style={{fontWeight:700,fontSize:13,marginBottom:1}}>{t.name}</div><div style={{fontSize:11,color:'var(--text-3)'}}>{t.desc}</div></div>
+            </div>
+            <Btn size="sm" variant={gng===t.id?'ghost':'outline'} disabled={gng===t.id} onClick={()=>generate(t)}>{gng===t.id?<><span style={{animation:'spin 1s linear infinite',display:'inline-block'}}>⟳</span> …</>:'Generate'}</Btn>
+          </div>)}
+        </div>
+      </Panel>
+      <Panel title="Generated Reports" subtitle="Download or share">
+        {gen.length===0?<EmptyState icon="📂" title="No reports yet" sub="Select a template and click Generate"/>
+        :<div>{gen.map(r=>{const c=FC[r.format]||FC.pdf;return<div key={r.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 15px',borderBottom:'1px solid #f1f5f9'}}>
+          <div style={{display:'flex',gap:9,alignItems:'center',flex:1,minWidth:0}}>
+            <div style={{width:30,height:30,borderRadius:'var(--r-md)',background:c.bg,border:`1.5px solid ${c.br}`,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'var(--font-mono)',fontSize:9,fontWeight:700,color:c.tx,flexShrink:0}}>{r.format.toUpperCase()}</div>
+            <div style={{minWidth:0}}>
+              <div style={{fontWeight:600,fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
+              <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)',marginTop:1}}>{r.size} · {fmtDT(r.at)}</div>
+            </div>
+          </div>
+          <Btn size="xs" variant="ghost" onClick={()=>onToast('Downloading '+r.name,'info')} style={{marginLeft:10,flexShrink:0}}>⬇ Download</Btn>
+        </div>;})}
+        </div>}
+      </Panel>
+    </Grid>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE: USERS
+// ═══════════════════════════════════════════════════════════════════
+const RC={admin:{bg:'#fff1f2',tx:'#be123c',br:'#fecdd3'},analyst:{bg:'#f0f5ff',tx:'#1340b8',br:'#c1d4ff'},operator:{bg:'#f5f3ff',tx:'#6d28d9',br:'#ddd6fe'},auditor:{bg:'#fffbeb',tx:'#b45309',br:'#fde68a'},viewer:{bg:'#f1f5f9',tx:'#475569',br:'#e2e8f0'}};
+function RB({role}){const c=RC[role]||RC.viewer;return<span style={{fontFamily:'var(--font-mono)',fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:99,background:c.bg,color:c.tx,border:`1px solid ${c.br}`,textTransform:'uppercase'}}>{role}</span>;}
+function Av({username,size=30}){
+  const cols=[['#f0f5ff','#2d6bff'],['#ecfdf5','#059669'],['#f5f3ff','#7c3aed'],['#fffbeb','#d97706'],['#fff1f2','#e11d48']];
+  const [bg,tx]=cols[username.charCodeAt(0)%cols.length];
+  return<div style={{width:size,height:size,borderRadius:'50%',background:bg,border:`1.5px solid ${tx}33`,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'var(--font-display)',fontSize:size*.35,fontWeight:700,color:tx,flexShrink:0}}>{username.slice(0,2).toUpperCase()}</div>;
+}
+function UsersPage({S,actions,onToast}){
+  const [am,sAm]=useState(false);
+  const [nu,sNu]=useState({username:'',email:'',role:'analyst',password:''});
+  return <div className="page-enter">
+    <Grid cols={4} gap={14} style={{marginBottom:18}}>
+      <StatCard icon="👤" label="Total Users" value={S.users.length} sub="All accounts" color="#2d6bff"/>
+      <StatCard icon="✅" label="Active Users" value={S.users.filter(u=>u.active).length} sub="Enabled" color="#10b981"/>
+      <StatCard icon="🔐" label="Administrators" value={S.users.filter(u=>u.role==='admin').length} sub="Full access" color="#e11d48"/>
+      <StatCard icon="🔍" label="Analysts" value={S.users.filter(u=>u.role==='analyst').length} sub="Security analysts" color="#7c3aed"/>
+    </Grid>
+    <Panel title="User Registry" subtitle={`${S.users.length} accounts · JWT sessions`}
+      actions={<Btn size="sm" variant="primary" onClick={()=>sAm(true)}>+ Add User</Btn>}>
+      <DataTable columns={[
+        {label:'User',render:r=><div style={{display:'flex',alignItems:'center',gap:9}}><Av username={r.username} size={27}/><div><div style={{fontWeight:600,fontSize:13}}>{r.username}</div><div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)'}}>{r.email}</div></div></div>},
+        {label:'Role',render:r=><RB role={r.role}/>},
+        {label:'Status',render:r=><Badge status={r.active?'active':'inactive'} size="xs"/>},
+        {label:'Created',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-3)'}}>{new Date(r.createdAt).toLocaleDateString('en-GB')}</span>},
+        {label:'Last Login',render:r=><span style={{fontFamily:'var(--font-mono)',fontSize:11,color:r.lastLogin?'var(--text-2)':'var(--text-3)'}}>{r.lastLogin?fmtDT(r.lastLogin):'Never'}</span>},
+        {label:'Actions',render:r=><div style={{display:'flex',gap:5}}>
+          <Btn size="xs" variant={r.active?'ghost':'success'} onClick={()=>onToast(`${r.username} ${r.active?'disabled':'enabled'}`,r.active?'warning':'success')} style={r.active?{color:'#e11d48',borderColor:'#fecdd3'}:{}}>{r.active?'Disable':'Enable'}</Btn>
+        </div>},
+      ]} rows={S.users} emptyText="No users"/>
+    </Panel>
+    <Modal open={am} onClose={()=>sAm(false)} title="Add New User"
+      footer={<><Btn variant="ghost" onClick={()=>sAm(false)}>Cancel</Btn><Btn variant="primary" onClick={()=>{if(!nu.username.trim()||!nu.email.trim()){onToast('Username and email required','warning');return;}if(nu.password.length<8){onToast('Password min 8 chars','warning');return;}actions.addUser({...nu,userId:Date.now(),active:true,createdAt:new Date().toISOString(),lastLogin:null});sAm(false);sNu({username:'',email:'',role:'analyst',password:''});onToast(`User "${nu.username}" created`,'success');}}>Create User</Btn></>}>
+      <Grid cols={2} gap={12}>
+        <FormGroup label="Username"><input value={nu.username} onChange={e=>sNu(p=>({...p,username:e.target.value}))} placeholder="analyst3"/></FormGroup>
+        <FormGroup label="Role"><select value={nu.role} onChange={e=>sNu(p=>({...p,role:e.target.value}))}>
+          {['admin','analyst','operator','auditor','viewer'].map(r=><option key={r} value={r}>{r.charAt(0).toUpperCase()+r.slice(1)}</option>)}
+        </select></FormGroup>
+      </Grid>
+      <FormGroup label="Email"><input type="email" value={nu.email} onChange={e=>sNu(p=>({...p,email:e.target.value}))} placeholder="user@shieldgod.local"/></FormGroup>
+      <FormGroup label="Password" hint="Minimum 8 characters"><input type="password" value={nu.password} onChange={e=>sNu(p=>({...p,password:e.target.value}))} placeholder="••••••••"/></FormGroup>
+    </Modal>
+  </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// APP STATE HOOK
+// ═══════════════════════════════════════════════════════════════════
+const IDS_T=[
+  {p:'TCP', port:22,   s:'HIGH',    t:'IDS',r:'SSH Brute Force Detection'},
+  {p:'TCP', port:3389, s:'HIGH',    t:'IDS',r:'RDP Brute Force Detection'},
+  {p:'TCP', port:445,  s:'MEDIUM',  t:'IDS',r:'SMB Lateral Movement'},
+  {p:'TCP', port:4444, s:'CRITICAL',t:'ANOMALY',r:'ML Anomaly Detection'},
+  {p:'N/A', port:0,    s:'CRITICAL',t:'WINDOWS_EVENT',r:'[WinEvent 7045]'},
+  {p:'N/A', port:0,    s:'HIGH',    t:'WINDOWS_EVENT',r:'[WinEvent 4625]'},
+];
+const SRC_IPS=['185.220.101.5','203.0.113.42','198.51.100.23','45.33.32.156'];
+const PROTOS=['TCP','TCP','TCP','UDP','ICMP'];
+const PORTS=[80,443,22,53,3389,8080,445,21];
+const RND_IP=()=>`${[10,192,172][Math.floor(Math.random()*3)]}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`;
+
+function useAppState(){
+  const [S,sS]=useState({
+    alerts:[...ALERTS0],incidents:[...INCIDENTS0],malwareScans:[...MALWARE0],
+    winEvents:[...EVENTS0],idsRules:[...RULES0],vulnFindings:[...VULNS0],
+    vulnScans:[],honeypots:[...HPS0],attackers:[...ATT0],users:[...USERS0],
+    capturePackets:0,captureRunning:false,trafficFeed:[],feedItems:[],
+  });
+  const capRef=useRef(null);
+  const evRef=useRef(null);
+  const pktRef=useRef(0);
+
+  const startCap=useCallback(()=>{
+    sS(p=>({...p,captureRunning:true}));
+    capRef.current=setInterval(()=>{
+      const n=Math.floor(Math.random()*8)+3;
+      const tf=Array.from({length:n},()=>({time:new Date().toLocaleTimeString('en-GB',{hour12:false}),src:RND_IP(),dst:['8.8.8.8','1.1.1.1','192.168.1.1','10.0.0.1'][Math.floor(Math.random()*4)],protocol:PROTOS[Math.floor(Math.random()*PROTOS.length)],port:PORTS[Math.floor(Math.random()*PORTS.length)],size:Math.floor(Math.random()*1400)+64}));
+      pktRef.current+=n;
+      const trig=Math.random()<.08;
+      let na=null;
+      if(trig){
+        const tmpl=IDS_T[Math.floor(Math.random()*IDS_T.length)];
+        const src=SRC_IPS[Math.floor(Math.random()*SRC_IPS.length)];
+        na={alertId:Date.now(),timestamp:new Date().toISOString(),severity:tmpl.s,alertType:tmpl.t,sourceIp:src,destinationIp:'192.168.1.1',destinationPort:tmpl.port,protocol:tmpl.p,ruleName:tmpl.r,status:'new',alertMessage:`${tmpl.r} from ${src}`};
+      }
+      sS(p=>{
+        const tf2=[...tf,...p.trafficFeed].slice(0,50);
+        const fi=na?[{time:new Date().toLocaleTimeString('en-GB',{hour12:false}),severity:na.severity,label:na.alertType,message:na.alertMessage},...p.feedItems].slice(0,30):p.feedItems;
+        let al=p.alerts,inc=p.incidents;
+        if(na){al=[na,...p.alerts];
+          if(na.severity==='CRITICAL'){inc=[{incidentId:Date.now(),incidentNumber:`INC-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${String(p.incidents.length+1).padStart(5,'0')}`,title:`Auto: ${na.ruleName} from ${na.sourceIp}`,severity:'critical',status:'open',createdAt:new Date().toISOString(),assignedTo:'auto-soc',affectedAssets:'192.168.1.1',description:na.alertMessage},...p.incidents];}
+        }
+        return{...p,capturePackets:pktRef.current,trafficFeed:tf2,feedItems:fi,alerts:al,incidents:inc};
+      });
+    },900);
+  },[]);
+
+  const stopCap=useCallback(()=>{clearInterval(capRef.current);sS(p=>({...p,captureRunning:false}));},[]);
+
+  useEffect(()=>{
+    const W=[
+      {eventId:4625,channel:'Security',level:'Warning',source:'Security Auditing',securityRelevant:true,message:'Account logon failure · ATTACKER-PC'},
+      {eventId:4624,channel:'Security',level:'Information',source:'Security Auditing',securityRelevant:false,message:'Successful logon · User: Rishikesh'},
+      {eventId:4688,channel:'Security',level:'Information',source:'Security Auditing',securityRelevant:true,message:'New process: cmd.exe /c whoami'},
+      {eventId:7036,channel:'System',level:'Information',source:'Service Control Mgr',securityRelevant:false,message:'Windows Defender service started'},
+    ];
+    evRef.current=setInterval(()=>{
+      if(Math.random()<.35){
+        const t=W[Math.floor(Math.random()*W.length)];
+        sS(p=>({...p,winEvents:[{...t,logId:Date.now(),computerName:'DESKTOP-SGD01',userName:'SYSTEM',eventTime:new Date().toISOString()},...p.winEvents].slice(0,50)}));
+      }
+    },5000);
+    return()=>{clearInterval(capRef.current);clearInterval(evRef.current);};
+  },[]);
+
+  const actions={
+    toggleCapture:()=>sS(p=>{if(p.captureRunning){stopCap();return p;}else{startCap();return p;}}),
+    addRule:r=>sS(p=>({...p,idsRules:[...p.idsRules,r]})),
+    deleteRule:id=>sS(p=>({...p,idsRules:p.idsRules.filter(r=>r.ruleId!==id)})),
+    toggleRule:id=>sS(p=>({...p,idsRules:p.idsRules.map(r=>r.ruleId===id?{...r,active:!r.active}:r)})),
+    updateAlertStatus:(id,s)=>sS(p=>({...p,alerts:p.alerts.map(a=>a.alertId===id?{...a,status:s}:a)})),
+    createIncident:d=>sS(p=>{const n={incidentId:Date.now(),incidentNumber:`INC-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${String(p.incidents.length+1).padStart(5,'0')}`,status:'open',createdAt:new Date().toISOString(),...d};return{...p,incidents:[n,...p.incidents]};}),
+    updateIncident:(id,s)=>sS(p=>({...p,incidents:p.incidents.map(i=>i.incidentId===id?{...i,status:s,resolvedAt:['resolved','closed'].includes(s)?new Date().toISOString():i.resolvedAt}:i)})),
+    addNote:()=>{},
+    scanFile:(fp,eng)=>{
+      const fn=fp.split(/[/\\]/).pop();
+      const risky=/\.(exe|dll|bat|ps1|vbs|scr|hta)$/i.test(fn);
+      const susp=/\.(msi|js|lnk)$/i.test(fn)||fp.toLowerCase().includes('temp');
+      const res=risky?'infected':susp?'suspicious':'clean';
+      const hash=Array.from({length:32},()=>Math.floor(Math.random()*16).toString(16)).join('');
+      const vtp=res==='infected'?Math.floor(Math.random()*40+20):res==='suspicious'?Math.floor(Math.random()*5):0;
+      const threats=['Trojan.GenericKD','Backdoor.Agent','Trojan.PowerShell','PUP.Optional'];
+      const scan={scanId:Date.now(),fileName:fn,filePath:fp,fileHash:hash,fileSize:Math.floor(Math.random()*5000000),scanEngine:eng,scanResult:res,threatName:res!=='clean'?threats[Math.floor(Math.random()*threats.length)]+'.'+Math.floor(Math.random()*99999):null,virustotalPositives:vtp,virustotalTotal:72,quarantined:res==='infected',scanTime:new Date().toISOString()};
+      sS(p=>({...p,malwareScans:[scan,...p.malwareScans]}));
+      return scan;
+    },
+    createScan:d=>sS(p=>{
+      const scan={scanId:Date.now(),scanName:d.name,scanType:d.type,targets:d.targets,scanStatus:'running',startTime:new Date().toISOString()};
+      setTimeout(()=>sS(pp=>({...pp,vulnScans:pp.vulnScans.map(s=>s.scanId===scan.scanId?{...s,scanStatus:'completed'}:s),vulnFindings:[...pp.vulnFindings,{findingId:Date.now(),hostIp:d.targets.split('/')[0],vulnerabilityName:`Open Port TCP/22 · ${d.targets}`,cveId:null,severity:'medium',status:'open',cvssScore:5.3}]})),4000);
+      return{...p,vulnScans:[scan,...p.vulnScans]};
+    }),
+    updateFinding:(id,s)=>sS(p=>({...p,vulnFindings:p.vulnFindings.map(f=>f.findingId===id?{...f,status:s}:f)})),
+    deployHoneypot:d=>sS(p=>({...p,honeypots:[...p.honeypots,{honeypotId:Date.now(),honeypotName:d.name,honeypotType:d.type,ipAddress:d.ip,port:d.port,active:true,interactions:0,lastActivity:new Date().toISOString()}]})),
+    toggleHoneypot:id=>sS(p=>({...p,honeypots:p.honeypots.map(h=>h.honeypotId===id?{...h,active:!h.active}:h)})),
+    addUser:u=>sS(p=>({...p,users:[...p.users,u]})),
+  };
+  return [S,actions];
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ROOT APP
+// ═══════════════════════════════════════════════════════════════════
+let tid=0;
+function App(){
+  const [user,sUser]=useState(null);
+  const [page,sPage]=useState('dashboard');
+  const [toasts,sTosts]=useState([]);
+  const [S,actions]=useAppState();
+
+  const showToast=useCallback((msg,type='info')=>{
+    const id=++tid;
+    sTosts(p=>[...p,{id,message:msg,type}]);
+  },[]);
+  const rmToast=id=>sTosts(p=>p.filter(t=>t.id!==id));
+
+  if(!user)return<><Login onLogin={u=>{sUser(u);showToast(`Welcome, ${u.username}!`,'success');}}/><Toasts toasts={toasts} onRm={rmToast}/></>;
+
+  const badges={
+    alerts:S.alerts.filter(a=>['CRITICAL','HIGH'].includes(a.severity)&&a.status==='new').length,
+    events:S.winEvents.filter(e=>e.securityRelevant).length,
+    malware:S.malwareScans.filter(s=>s.scanResult==='infected').length,
+    incidents:S.incidents.filter(i=>['open','investigating'].includes(i.status)).length,
+    rules:S.idsRules.filter(r=>r.active).length,
+  };
+
+  const PP={appState:S,S,actions,onNavigate:sPage,onToast:showToast};
+  const pages={
+    dashboard:<Dashboard S={S} onNav={sPage}/>,
+    network:  <Network S={S} actions={actions} onToast={showToast}/>,
+    events:   <WindowsEventsPage S={S}/>,
+    malware:  <MalwarePage S={S} actions={actions} onToast={showToast}/>,
+    incidents:<IncidentsPage S={S} actions={actions} onToast={showToast}/>,
+    vuln:     <VulnPage S={S} actions={actions} onToast={showToast}/>,
+    honeypot: <HoneypotPage S={S} actions={actions} onToast={showToast}/>,
+    reports:  <ReportsPage S={S} onToast={showToast}/>,
+    users:    <UsersPage S={S} actions={actions} onToast={showToast}/>,
+  };
+
+  return <>
+    <div style={{display:'flex',height:'100vh',overflow:'hidden',background:'var(--bg)'}}>
+      <Sidebar active={page} onNav={sPage} badges={badges} capRunning={S.captureRunning}/>
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <Header page={page} user={user} capRunning={S.captureRunning}
+          onToggleCap={()=>{actions.toggleCapture();showToast(S.captureRunning?`Capture stopped · ${S.capturePackets.toLocaleString()} packets`:'Packet capture started','success');}}
+          onLogout={()=>{sUser(null);sPage('dashboard');}}
+          onToast={showToast}/>
+        <main style={{flex:1,overflowY:'auto',padding:'22px 24px',background:'var(--bg)'}}>
+          {pages[page]||pages.dashboard}
+        </main>
+      </div>
+    </div>
+    <Toasts toasts={toasts} onRm={rmToast}/>
+  </>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
