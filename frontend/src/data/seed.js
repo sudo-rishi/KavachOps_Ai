@@ -1,5 +1,5 @@
 /**
- * Shield-God Reference Data
+ * KavachOps AI Reference Data
  * Only contains mapping/reference data - no mock/seed data for live backend
  */
 

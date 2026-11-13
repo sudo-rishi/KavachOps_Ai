@@ -66,7 +66,8 @@ export function Card({ children, style = {}, padding = "20px", hover = false }) 
   return (
     <div
       style={{
-        background: "var(--color-surface)", border: "1.5px solid var(--color-border)",
+        background: "var(--color-surface)",
+        border: "1.5px solid var(--color-border)",
         borderRadius: "var(--r-lg)", padding,
         boxShadow: hov && hover ? "var(--shadow-md)" : "var(--shadow-xs)",
         transition: "box-shadow 0.2s, border-color 0.2s",
@@ -79,16 +80,61 @@ export function Card({ children, style = {}, padding = "20px", hover = false }) 
   );
 }
 
+function StatCardIcon({ label }) {
+  const icons = {
+    "Active Alerts": <><path d="M6 17h12l-1.2-1.8V10a4.8 4.8 0 0 0-9.6 0v5.2L6 17Z" /><path d="M10 20h4" /></>,
+    "Open Incidents": <path d="m12 3 2.3 5.1 5.7.7-4.2 4 1.1 5.7-4.9-2.7-4.9 2.7 1.1-5.7-4.2-4 5.7-.7L12 3Z" />,
+    "Packets Captured": <><path d="m7 7 5-3 5 3-5 3-5-3Z" /><path d="m7 12 5 3 5-3M7 17l5 3 5-3" /><path d="M12 10v5" /></>,
+    "Total Alerts": <><path d="M6 17h12l-1.2-1.8V10a4.8 4.8 0 0 0-9.6 0v5.2L6 17Z" /><path d="M10 20h4M12 3v2" /><circle cx="18" cy="6" r="2.2" /></>,
+    "Critical/High": <><path d="M12 3 20 7v5c0 4.5-3.1 7.6-8 9-4.9-1.4-8-4.5-8-9V7l8-4Z" /><path d="M12 8v5M12 16h.01" strokeWidth="2.2" /></>,
+    "Active Rules": <><path d="M5 6h14M5 12h14M5 18h14" /><circle cx="9" cy="6" r="2" fill="currentColor" /><circle cx="15" cy="12" r="2" fill="currentColor" /><circle cx="11" cy="18" r="2" fill="currentColor" /></>,
+    "Active Traps": <><path d="M8 4h8M9 4v4l-3 7a3 3 0 0 0 3 4h6a3 3 0 0 0 3-4l-3-7V4" /><path d="M8 14h8" /></>,
+    "Interactions (24h)": <><path d="M4 12h4l2-6 4 12 2-6h4" /></>,
+    "Unique Attackers": <><circle cx="12" cy="8" r="3" /><path d="M5 20a7 7 0 0 1 14 0" /></>,
+    "Critical Threats": <><circle cx="12" cy="12" r="7" /><path d="M12 8v5M12 16h.01" strokeWidth="2.2" /></>,
+    "Open": <><path d="M5 8h14v11H5z" /><path d="M8 8V6a4 4 0 0 1 8 0v2M9 13h6" /></>,
+    "Investigating": <><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5" /></>,
+    "Contained": <><path d="M12 3 20 7v5c0 4.5-3.1 7.6-8 9-4.9-1.4-8-4.5-8-9V7l8-4Z" /><path d="m9 12 2 2 4-4" /></>,
+    "Resolved": <><circle cx="12" cy="12" r="8" /><path d="m8 12 2.5 2.5L16 9" /></>,
+    "Infected": <><path d="M8 8.5a4 4 0 0 1 8 0v7a4 4 0 0 1-8 0z" /><path d="M6 10H3M6 14H4M18 10h3M18 14h2M9 5 8 3M15 5l1-2" /></>,
+    "Suspicious": <><path d="m12 3 9 17H3L12 3Z" /><path d="M12 9v5M12 17h.01" strokeWidth="2.2" /></>,
+    "Clean": <><path d="M12 3 20 7v5c0 4.5-3.1 7.6-8 9-4.9-1.4-8-4.5-8-9V7l8-4Z" /><path d="m9 12 2 2 4-4" /></>,
+    "Quarantined": <><rect x="5" y="4" width="14" height="16" rx="2" /><path d="M9 4v4h6V4M9 13h6M9 16h4" /></>,
+    "Total Users": <><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0M16 11a3 3 0 1 0 0-6M17 14a5 5 0 0 1 4 6" /></>,
+    "Active Users": <><circle cx="10" cy="8" r="3" /><path d="M4 20a6 6 0 0 1 12 0M16 14l2 2 3-4" /></>,
+    "Administrators": <><path d="M12 3 20 7v5c0 4.5-3.1 7.6-8 9-4.9-1.4-8-4.5-8-9V7l8-4Z" /><path d="M12 8v5M9.5 10.5h5" /></>,
+    "Analysts": <><path d="M5 19V9M12 19V5M19 19v-7" /><path d="M3 19h18" /></>,
+    "Critical": <><path d="m12 3 9 17H3L12 3Z" /><path d="M12 9v5M12 17h.01" strokeWidth="2.2" /></>,
+    "High": <><path d="m12 3 9 17H3L12 3Z" /><path d="M12 9v5M12 17h.01" strokeWidth="2.2" /></>,
+    "Medium": <><circle cx="12" cy="12" r="8" /><path d="M12 8v5M12 16h.01" strokeWidth="2.2" /></>,
+    "Low / Info": <><circle cx="12" cy="12" r="8" /><path d="M9 12h6" /></>,
+    "Total Events (24h)": <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16M8 14h3M8 17h6" /></>,
+    "Failed Logins": <><rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" /></>,
+    "Critical Events": <><path d="m12 3 9 17H3L12 3Z" /><path d="M12 9v5M12 17h.01" strokeWidth="2.2" /></>,
+    "Alerts (30d)": <><path d="M6 17h12l-1.2-1.8V10a4.8 4.8 0 0 0-9.6 0v5.2L6 17Z" /><path d="M10 20h4M12 3v2" /></>,
+    "Infected Files": <><path d="M8 8.5a4 4 0 0 1 8 0v7a4 4 0 0 1-8 0z" /><path d="M6 10H3M6 14H4M18 10h3M18 14h2M9 5 8 3M15 5l1-2" /></>,
+    "Critical Vulns": <><path d="m12 3 9 17H3L12 3Z" /><path d="M12 9v5M12 17h.01" strokeWidth="2.2" /></>,
+    "Security Events": <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
+  };
+  return (
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {icons[label] || <circle cx="12" cy="12" r="7" />}
+    </svg>
+  );
+}
+
 // ── StatCard ────────────────────────────────────────────────────
 export function StatCard({ icon, label, value, sub, color = "#2d6bff", trend, onClick }) {
   const [hov, setHov] = useState(false);
   return (
     <div
       style={{
-        background: "var(--color-surface)", border: "1.5px solid var(--color-border)",
+        background: `linear-gradient(135deg, #ffffff 0%, ${color}14 100%)`,
+        border: "1.5px solid var(--color-border)",
         borderRadius: "var(--r-lg)", padding: "18px 20px",
-        boxShadow: hov ? "var(--shadow-md)" : "var(--shadow-xs)",
-        borderColor: hov ? color + "55" : "var(--color-border)",
+        boxShadow: hov ? `0 10px 24px ${color}18` : "var(--shadow-xs)",
+        borderColor: hov ? color + "66" : color + "38",
         transition: "all 0.18s", cursor: onClick ? "pointer" : "default",
         position: "relative", overflow: "hidden",
       }}
@@ -97,16 +143,23 @@ export function StatCard({ icon, label, value, sub, color = "#2d6bff", trend, on
       onMouseLeave={() => setHov(false)}
     >
       <div style={{
-        position: "absolute", bottom: 0, left: 0, right: 0, height: 3,
+        position: "absolute", top: 0, left: 0, right: 0, height: 3,
         background: `linear-gradient(90deg, transparent 0%, ${color}40 50%, transparent 100%)`,
         opacity: hov ? 1 : 0.5, transition: "opacity 0.2s",
+      }} />
+      <div style={{
+        position: "absolute", width: 110, height: 110, right: -48, top: -48,
+        borderRadius: "50%", background: `${color}14`, pointerEvents: "none",
       }} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
         <div style={{
           width: 36, height: 36, borderRadius: "var(--r-md)",
-          background: color + "18", display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 18,
-        }}>{icon}</div>
+          background: `linear-gradient(145deg, ${color}2e, ${color}16)`,
+          border: `1px solid ${color}4d`,
+          boxShadow: `0 4px 10px ${color}18`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 17, lineHeight: 1, color,
+        }}><StatCardIcon label={label} /></div>
         {trend && (
           <span style={{ fontSize: 11, fontWeight: 600, color: trend > 0 ? "#e11d48" : "#059669",
             fontFamily: "var(--font-mono)" }}>
@@ -141,15 +194,33 @@ export function SectionHeader({ title, sub, action, icon }) {
   );
 }
 
+function inferPanelAccent(title) {
+  const text = String(title || "").toLowerCase();
+  if (/network|traffic|packet|ids/.test(text)) return "#2563eb";
+  if (/event|windows|log/.test(text)) return "#0f766e";
+  if (/malware|scan|quarantine/.test(text)) return "#16a34a";
+  if (/incident|alert|threat/.test(text)) return "#e11d48";
+  if (/vuln|cve|risk/.test(text)) return "#d97706";
+  if (/honey|attacker/.test(text)) return "#9333ea";
+  if (/report|compliance|executive/.test(text)) return "#0891b2";
+  return "#2d6bff";
+}
+
 // ── Panel ────────────────────────────────────────────────────────
-export function Panel({ title, subtitle, actions, children, padding = "0" }) {
+export function Panel({ title, subtitle, actions, children, padding = "0", accent }) {
+  const panelAccent = accent || inferPanelAccent(title);
   return (
-    <Card padding="0">
+    <Card padding="0" style={panelAccent ? {
+      borderColor: `${panelAccent}35`,
+      boxShadow: `0 4px 14px ${panelAccent}10`,
+      background: `linear-gradient(135deg, #ffffff 0%, ${panelAccent}08 100%)`,
+    } : {}}>
       {(title || actions) && (
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "14px 18px", borderBottom: "1.5px solid var(--color-border)",
-          background: "#fafbfd",
+          background: `linear-gradient(135deg, #ffffff 0%, ${panelAccent}0d 100%)`,
+          borderTop: `3px solid ${panelAccent}70`,
         }}>
           <div>
             <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13,
@@ -364,10 +435,22 @@ export function ProgressBar({ value, max = 100, color = "#2d6bff", height = 6 })
 }
 
 // ── Empty State ──────────────────────────────────────────────────
-export function EmptyState({ icon = "📭", title, sub }) {
+function EmptyStateIcon({ icon }) {
+  const common = {
+    width: 34, height: 34, viewBox: "0 0 24 24", fill: "none",
+    stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round",
+    "aria-hidden": true,
+  };
+  if (icon === "events") return <svg {...common}><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>;
+  if (icon === "analytics") return <svg {...common}><path d="M5 19V9M12 19V5M19 19v-7" /><path d="M3 19h18" /><path d="m5 7 4-3 4 2 5-4" /></svg>;
+  if (icon === "honeypot") return <svg {...common}><path d="M8 4h8M9 4v4l-3 7a3 3 0 0 0 3 4h6a3 3 0 0 0 3-4l-3-7V4" /><path d="M8 14h8" /></svg>;
+  return <svg {...common}><path d="M4 5h16v14H4z" /><path d="M8 9h8M8 13h5" /></svg>;
+}
+
+export function EmptyState({ icon = "default", title, sub }) {
   return (
     <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--color-text-tertiary)" }}>
-      <div style={{ fontSize: 32, marginBottom: 10 }}>{icon}</div>
+      <div style={{ marginBottom: 10, display: "flex", justifyContent: "center" }}><EmptyStateIcon icon={icon} /></div>
       <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-secondary)", marginBottom: 4 }}>{title}</div>
       {sub && <div style={{ fontSize: 12 }}>{sub}</div>}
     </div>

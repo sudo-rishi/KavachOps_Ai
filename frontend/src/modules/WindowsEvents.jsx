@@ -139,7 +139,7 @@ export default function WindowsEvents({ appState }) {
         >
           <div style={{ maxHeight:300, overflowY:"auto" }}>
             {winEvents.length === 0 ? (
-              <EmptyState icon="🪟" title="No events yet" sub="Windows Event reader polling…" />
+              <EmptyState icon="events" title="No events yet" sub="Windows Event reader polling…" />
             ) : (
               winEvents.map(e => {
                 const meta = EVENT_SEVERITY[e.eventId] || { sev:"INFO", color:"#94a3b8" };
@@ -182,7 +182,7 @@ export default function WindowsEvents({ appState }) {
         <Panel title="Top Security Event IDs" subtitle="Frequency analysis">
           <div style={{ padding:"0 4px" }}>
             {topIds.length === 0 ? (
-              <EmptyState icon="📊" title="No data" sub="Events will appear after polling" />
+              <EmptyState icon="analytics" title="No data" sub="Events will appear after polling" />
             ) : (
               topIds.map(([id, count]) => {
                 const meta = EVENT_SEVERITY[+id] || { sev:"INFO", color:"#94a3b8" };

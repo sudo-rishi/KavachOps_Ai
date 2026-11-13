@@ -18,7 +18,7 @@ import io.swagger.v3.oas.models.servers.Server;
 public class OpenApiConfig {
 
     @Bean
-    public OpenAPI shieldGodOpenAPI() {
+    public OpenAPI kavachOpsAiOpenAPI() {
         return new OpenAPI()
             .info(new Info()
                 .title("KavachOps Ai Security Platform API")

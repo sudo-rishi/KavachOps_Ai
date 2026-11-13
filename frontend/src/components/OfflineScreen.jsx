@@ -81,7 +81,7 @@ export function OfflineScreen({ error, onRetry, retrying }) {
             color:"#0f172a", letterSpacing:"-.04em", marginBottom:6,
           }}>Backend Unreachable</h1>
           <p style={{ fontSize:13, color:"#64748b", lineHeight:1.6 }}>
-            Shield-God requires the Java backend to be running.<br/>
+            KavachOps AI requires the Java backend to be running.<br/>
             The app cannot function in offline mode.
           </p>
         </div>
@@ -140,9 +140,9 @@ export function OfflineScreen({ error, onRetry, retrying }) {
             </div>
             {[
               { n:1, text:"Install Npcap from npcap.com (WinPcap compat mode ✓)" },
-              { n:2, text:"Start PostgreSQL and ensure DB 'shieldgod' exists" },
+              { n:2, text:"Start PostgreSQL and ensure the application database exists" },
               { n:3, text:"Run start.bat as Administrator" },
-              { n:4, text:"Wait for Spring Boot to show: 'Shield-God STARTED'" },
+              { n:4, text:"Wait for Spring Boot to show: 'KavachOps AI STARTED'" },
             ].map(s => (
               <div key={s.n} style={{ display:"flex", gap:10, marginBottom:8 }}>
                 <span style={{

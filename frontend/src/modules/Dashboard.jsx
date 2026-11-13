@@ -49,6 +49,26 @@ function areaPath(points, h = 110, pad = 14) {
   return `M ${first[0]} ${h - pad} L ${points.join(" L ")} L ${last[0]} ${h - pad} Z`;
 }
 
+function ModuleLogo({ type, color }) {
+  const common = {
+    width: 22, height: 22, viewBox: "0 0 24 24", fill: "none",
+    stroke: color, strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round",
+    "aria-hidden": true,
+  };
+  if (type === "network") return <svg {...common}><circle cx="5" cy="12" r="2.4" fill={`${color}22`} /><circle cx="18.5" cy="6" r="2.4" fill={`${color}22`} /><circle cx="18.5" cy="18" r="2.4" fill={`${color}22`} /><path d="m7.2 11 9-4M7.2 13l9 4" /></svg>;
+  if (type === "events") return <svg {...common}><rect x="3.5" y="4" width="17" height="16" rx="2.5" fill={`${color}12`} /><path d="M8 4v16M16 4v16M3.5 12h17" /><path d="M6 7h.01M11 7h.01M19 7h.01M6 16h.01M11 16h.01M19 16h.01" strokeWidth="2.4" /></svg>;
+  if (type === "malware") return <svg {...common}><path d="M8 8.5a4 4 0 0 1 8 0v7a4 4 0 0 1-8 0z" fill={`${color}16`} /><path d="M6 10h-2M6 14H3M18 10h2M18 14h3M9 5 8 3M15 5l1-2M9 19l-1 2M15 19l1 2" /><path d="M9.5 12h.01M14.5 12h.01M10 16c1.2.7 2.8.7 4 0" strokeWidth="2.2" /></svg>;
+  if (type === "vuln") return <svg {...common}><circle cx="10.5" cy="10.5" r="6" fill={`${color}12`} /><path d="m15 15 5 5M10.5 7.5v6M7.5 10.5h6" /></svg>;
+  if (type === "honeypot") return <svg {...common}><path d="M8 4h8M9 4v4l-3 7a3 3 0 0 0 3 4h6a3 3 0 0 0 3-4l-3-7V4" fill={`${color}12`} /><path d="M8 14h8" /></svg>;
+  return <svg {...common}><rect x="5" y="6" width="14" height="13" rx="3" fill={`${color}16`} /><path d="M9 3v3M15 3v3M3 11h2M19 11h2M9 19v2M15 19v2" /><circle cx="9.5" cy="12" r="1" fill={color} stroke="none" /><circle cx="14.5" cy="12" r="1" fill={color} stroke="none" /><path d="M9 15h6" /></svg>;
+}
+
+function moduleAccent(label, fallback) {
+  if (label === "Vuln Scanner") return "#d97706";
+  if (label === "Honeypots") return "#0f766e";
+  return fallback;
+}
+
 export default function Dashboard({ appState, onNavigate }) {
   const {
     alerts,
@@ -145,7 +165,7 @@ export default function Dashboard({ appState, onNavigate }) {
       </Grid>
 
       <Grid cols={2} gap={16} style={{ marginBottom:20 }}>
-        <Panel title="Traffic Trend Graph" subtitle={`${selectedRangeLabel} · Last 12 slices`}>
+        <Panel accent="#2d6bff" title="Traffic Trend Graph" subtitle={`${selectedRangeLabel} · Last 12 slices`}>
           <div style={{ padding:16 }}>
             <svg viewBox="0 0 440 110" style={{ width:"100%", height:120, display:"block" }}>
               <defs>
@@ -186,7 +206,7 @@ export default function Dashboard({ appState, onNavigate }) {
           </div>
         </Panel>
 
-        <Panel title="Severity Ring" subtitle="Current alert composition">
+        <Panel accent="#7c3aed" title="Severity Ring" subtitle="Current alert composition">
           <div style={{ padding:16, display:"flex", gap:18, alignItems:"center" }}>
             <svg viewBox="0 0 160 160" style={{ width:150, height:150, flexShrink:0 }}>
               <circle cx="80" cy="80" r="52" stroke="#e2e8f0" strokeWidth="20" fill="none" />
@@ -221,6 +241,7 @@ export default function Dashboard({ appState, onNavigate }) {
       <Grid cols={2} gap={16} style={{ marginBottom:20 }}>
         {/* Live Feed */}
         <Panel
+          accent="#0f9f9a"
           title="Live Alert Feed"
           subtitle={captureRunning ? "Streaming live" : "Start capture to stream"}
           actions={<LivePulse active={captureRunning} label={captureRunning ? "LIVE" : "IDLE"} />}
@@ -238,7 +259,7 @@ export default function Dashboard({ appState, onNavigate }) {
         </Panel>
 
         {/* Threat Breakdown */}
-        <Panel title="Threat Breakdown" subtitle={selectedRangeLabel}>
+        <Panel accent="#f59e0b" title="Threat Breakdown" subtitle={selectedRangeLabel}>
           <div style={{ padding:18 }}>
             {[
               { label:"Critical", count:critAlerts, color:"#e11d48", pct:(critAlerts/totalAlerts)*100 },
@@ -290,21 +311,37 @@ export default function Dashboard({ appState, onNavigate }) {
           <div key={i}
             onClick={() => onNavigate(m.page)}
             style={{
-              background:"var(--color-surface)", border:"1.5px solid var(--color-border)",
+              background:`linear-gradient(135deg, #ffffff 0%, ${moduleAccent(m.label, m.color)}12 100%)`,
+              border:`1.5px solid ${moduleAccent(m.label, m.color)}35`,
               borderRadius:"var(--r-lg)", padding:"16px 18px",
               cursor:"pointer", transition:"all 0.15s",
-              boxShadow:"var(--shadow-xs)",
+              boxShadow:`0 3px 10px ${moduleAccent(m.label, m.color)}10`,
+              position:"relative", overflow:"hidden",
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = m.color+"55"; e.currentTarget.style.boxShadow = "var(--shadow-md)"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--color-border)"; e.currentTarget.style.boxShadow = "var(--shadow-xs)"; }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = moduleAccent(m.label, m.color)+"55"; e.currentTarget.style.boxShadow = "var(--shadow-md)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = moduleAccent(m.label, m.color)+"35"; e.currentTarget.style.boxShadow = `0 3px 10px ${moduleAccent(m.label, m.color)}10`; }}
           >
+            <div style={{ position:"absolute", top:0, left:0, right:0, height:3,
+              background:`linear-gradient(90deg, transparent, ${moduleAccent(m.label, m.color)}70, transparent)` }} />
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-              <span style={{ fontSize:20 }}>{m.icon}</span>
+              <span style={{ width:34, height:34, borderRadius:10, display:"flex",
+                alignItems:"center", justifyContent:"center", fontSize:19,
+                background:`${moduleAccent(m.label, m.color)}20`, border:`1px solid ${moduleAccent(m.label, m.color)}38`,
+                boxShadow:`0 3px 8px ${moduleAccent(m.label, m.color)}12` }}>
+                <ModuleLogo type={{
+                  "Network IDS": "network",
+                  "Win Events": "events",
+                  "Malware Engine": "malware",
+                  "Vuln Scanner": "vuln",
+                  "Honeypots": "honeypot",
+                  "ML Service": "ml",
+                }[m.label]} color={moduleAccent(m.label, m.color)} />
+              </span>
               <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                <span style={{ width:6, height:6, borderRadius:"50%", background:m.color,
+                <span style={{ width:6, height:6, borderRadius:"50%", background:moduleAccent(m.label, m.color),
                   display:"inline-block", animation:"pulseDot 2s ease-in-out infinite" }} />
                 <span style={{ fontSize:10, fontFamily:"var(--font-mono)", fontWeight:700,
-                  color:m.color, textTransform:"uppercase" }}>{m.status}</span>
+                  color:moduleAccent(m.label, m.color), textTransform:"uppercase" }}>{m.status}</span>
               </div>
             </div>
             <div style={{ fontFamily:"var(--font-display)", fontWeight:700, fontSize:13,

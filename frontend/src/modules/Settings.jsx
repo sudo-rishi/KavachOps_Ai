@@ -85,7 +85,7 @@ export default function Settings({ appState, currentUser, onToast }) {
     name: currentUser?.username || "Lead Analyst",
     role: "Lead Security Analyst",
     id: "SG-992-KUM",
-    email: currentUser?.email || "r.kumar@shieldgod.internal",
+    email: currentUser?.email || "r.kumar@kavachopsai.internal",
     workstationIp: appState?.workstationIp || "10.0.4.128",
     clearance: "LEVEL_7",
     policy: "SENSITIVE_ISO",

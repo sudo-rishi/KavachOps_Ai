@@ -19,6 +19,27 @@ const BADGE_COLORS = {
   green: { bg:"#ecfdf5", text:"#047857", border:"#a7f3d0" },
 };
 
+const MODULE_ICON_COLORS = {
+  dashboard: "#2563eb", network: "#0f766e", events: "#0891b2", malware: "#16a34a",
+  incidents: "#e11d48", vuln: "#d97706", honeypot: "#9333ea", reports: "#0891b2", settings: "#64748b",
+};
+
+function ModuleIcon({ id }) {
+  const color = MODULE_ICON_COLORS[id] || "#64748b";
+  const paths = {
+    dashboard: <><path d="M12 3 20 7v5c0 4.5-3.1 7.6-8 9-4.9-1.4-8-4.5-8-9V7l8-4Z" /><path d="m9 12 2 2 4-4" /></>,
+    network: <><circle cx="6" cy="12" r="2" /><circle cx="18" cy="7" r="2" /><circle cx="18" cy="17" r="2" /><path d="m8 11 8-3M8 13l8 3" /></>,
+    events: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
+    malware: <><path d="M9 8V5M15 8V5M7 11H4M20 11h-3M8 16l-2 3M16 16l2 3" /><path d="M8 8h8a3 3 0 0 1 3 3v3a5 5 0 0 1-10 0v-3a3 3 0 0 1 3-3Z" /></>,
+    incidents: <><path d="M12 3c1.8 3.2 5 5.1 5 9a5 5 0 0 1-10 0c0-2 1-3.7 2.6-5.2" /><path d="M12 12c1.3 1.1 1.8 2.1 1.8 3a1.8 1.8 0 0 1-3.6 0c0-.9.5-1.8 1.8-3Z" /></>,
+    vuln: <><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5M10.5 7.5v6M7.5 10.5h6" /></>,
+    honeypot: <><path d="M8 4h8M9 4v4l-3 7a3 3 0 0 0 3 4h6a3 3 0 0 0 3-4l-3-7V4" /><path d="M8 14h8" /></>,
+    reports: <><path d="M5 20V10M12 20V4M19 20v-7" /><path d="M3 20h18" /></>,
+    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.4 1.4-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-2v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L9 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H7v-2h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L8.4 9 9.8 7.6l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6v-.2h2v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.2 9l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v2h-.2a1.7 1.7 0 0 0-1 1Z" /></>,
+  };
+  return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[id]}</svg>;
+}
+
 export default function Sidebar({ activePage, onNavigate, badges = {}, status = {} }) {
   const [hovId, setHovId] = useState(null);
 
@@ -95,7 +116,9 @@ export default function Sidebar({ activePage, onNavigate, badges = {}, status = 
                 borderLeft: isActive ? "2.5px solid #2d6bff" : "2.5px solid transparent",
               }}
             >
-              <span style={{ fontSize:14, width:20, textAlign:"center", flexShrink:0 }}>{item.icon}</span>
+              <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <ModuleIcon id={item.id} />
+              </span>
               <span style={{
                 fontFamily:"var(--font-body)", fontWeight:isActive ? 600 : 500, fontSize:13,
                 color: isActive ? "#1340b8" : "var(--color-text-secondary)", flex:1,
@@ -126,6 +149,7 @@ export default function Sidebar({ activePage, onNavigate, badges = {}, status = 
           { label:"Capture",  val: status.capture  ? "Active"    : "Inactive",  ok: status.capture  },
           { label:"Win-Evts", val: "Polling",                                   ok: true            },
           { label:"ML Svc",   val: "Online",                                    ok: true            },
+          { label:"Sarvam AI",val: "Connected",                                 ok: true            },
           { label:"Database", val: "Connected",                                 ok: true            },
         ].map(s => (
           <div key={s.label} style={{ display:"flex", justifyContent:"space-between",
