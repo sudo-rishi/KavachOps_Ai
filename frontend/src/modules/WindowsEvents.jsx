@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Panel, Grid, StatCard, Badge, DataTable, EmptyState } from "../components/UI.jsx";
+import { Panel, Grid, StatCard, Badge, DataTable, EmptyState, Btn } from "../components/UI.jsx";
 import { events as eventsApi } from "../api/client.js";
 import { EVENT_ID_NAMES } from "../data/seed.js";
 import { fmtTime } from "../utils/dateFormatter.js";
@@ -31,6 +31,29 @@ function inferEventNameFromMessage(message = "") {
 export default function WindowsEvents({ appState }) {
   const { winEvents } = appState;
   const [catalogById, setCatalogById] = useState({});
+  const [sarvamQuestion, setSarvamQuestion] = useState("");
+  const [sarvamScope, setSarvamScope] = useState("security");
+  const [sarvamResult, setSarvamResult] = useState(null);
+  const [sarvamError, setSarvamError] = useState("");
+  const [sarvamLoading, setSarvamLoading] = useState(false);
+
+  const analyzeWithSarvam = async () => {
+    setSarvamLoading(true);
+    setSarvamError("");
+    try {
+      const result = await eventsApi.analyzeWithSarvam({
+        question: sarvamQuestion.trim(),
+        scope: sarvamScope,
+        limit: 50,
+      });
+      setSarvamResult(result);
+    } catch (error) {
+      setSarvamError(error.message || "Sarvam event analysis failed");
+      setSarvamResult(null);
+    } finally {
+      setSarvamLoading(false);
+    }
+  };
 
   const visibleEventIds = useMemo(() => {
     const ids = new Set();
@@ -118,6 +141,89 @@ export default function WindowsEvents({ appState }) {
         <StatCard icon="🚫" label="Failed Logins"      value={failed}   sub="Event ID 4625"  color="#e11d48" />
         <StatCard icon="⚡" label="Critical Events"    value={critical} sub="Needs review"   color="#f59e0b" />
       </Grid>
+
+      <Panel title="Sarvam Windows Event Analysis" subtitle="Analyze stored event logs or ask a question about recent activity">
+        <div style={{ padding:16 }}>
+          <div style={{ marginBottom:10, color:"#64748b", fontSize:11 }}>
+            Up to 50 selected event messages and metadata are sent to Sarvam; raw event XML is excluded.
+          </div>
+          <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+            <select
+              aria-label="Event scope"
+              value={sarvamScope}
+              onChange={(event) => setSarvamScope(event.target.value)}
+              style={{ padding:"9px 10px", border:"1px solid #cbd5e1", borderRadius:8, color:"#334155" }}
+            >
+              <option value="security">Security events</option>
+              <option value="all">All channels</option>
+            </select>
+            <input
+              aria-label="Question about Windows events"
+              value={sarvamQuestion}
+              onChange={(event) => setSarvamQuestion(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && analyzeWithSarvam()}
+              maxLength={500}
+              placeholder="Optional question, e.g. explain the failed login activity"
+              style={{ flex:"1 1 320px", minWidth:220, padding:"9px 11px", border:"1px solid #cbd5e1", borderRadius:8 }}
+            />
+            <Btn variant="primary" onClick={analyzeWithSarvam} disabled={sarvamLoading}>
+              {sarvamLoading ? "Analyzing..." : sarvamQuestion.trim() ? "Ask Sarvam" : "Analyze logs"}
+            </Btn>
+          </div>
+          {sarvamError && (
+            <div role="alert" style={{ marginTop:12, color:"#b91c1c", fontSize:13 }}>{sarvamError}</div>
+          )}
+          {sarvamResult?.status === "no_events" && (
+            <div style={{ marginTop:12, color:"#64748b", fontSize:13 }}>No stored events match this scope.</div>
+          )}
+          {sarvamResult?.analysis && (
+            <div style={{ marginTop:16, borderTop:"1px solid #e2e8f0", paddingTop:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                <strong style={{ color:"#0f172a" }}>Risk: {sarvamResult.analysis.riskLevel}</strong>
+                <span style={{ color:"#64748b", fontSize:12 }}>
+                  Analyzed {sarvamResult.eventsAnalyzed} stored events
+                </span>
+              </div>
+              <p style={{ margin:"0 0 12px", color:"#334155", lineHeight:1.55, whiteSpace:"pre-wrap" }}>
+                {sarvamResult.analysis.answer}
+              </p>
+              {!!sarvamResult.analysis.keyFindings?.length && (
+                <div style={{ marginBottom:10 }}>
+                  <strong style={{ fontSize:12, color:"#334155" }}>Key findings</strong>
+                  <ul style={{ margin:"6px 0 0", paddingLeft:20, color:"#475569", fontSize:12 }}>
+                    {sarvamResult.analysis.keyFindings.map((finding, index) => <li key={index}>{finding}</li>)}
+                  </ul>
+                </div>
+              )}
+              {!!sarvamResult.analysis.recommendations?.length && (
+                <div style={{ marginBottom:10 }}>
+                  <strong style={{ fontSize:12, color:"#334155" }}>Recommendations</strong>
+                  <ul style={{ margin:"6px 0 0", paddingLeft:20, color:"#475569", fontSize:12 }}>
+                    {sarvamResult.analysis.recommendations.map((recommendation, index) => <li key={index}>{recommendation}</li>)}
+                  </ul>
+                </div>
+              )}
+              {!!sarvamResult.relevantEvents?.length && (
+                <details style={{ marginTop:10 }}>
+                  <summary style={{ cursor:"pointer", color:"#2d6bff", fontSize:12 }}>
+                    View {sarvamResult.relevantEvents.length} relevant log entries
+                  </summary>
+                  <div style={{ display:"grid", gap:8, marginTop:10 }}>
+                    {sarvamResult.relevantEvents.map((event) => (
+                      <div key={event.logId} style={{ padding:10, border:"1px solid #e2e8f0", borderRadius:8 }}>
+                        <div style={{ fontSize:11, color:"#64748b", marginBottom:4 }}>
+                          {event.eventTime} · {event.channel} · Event {event.eventId} · {event.level}
+                        </div>
+                        <div style={{ fontSize:12, color:"#334155", whiteSpace:"pre-wrap" }}>{event.message}</div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
+        </div>
+      </Panel>
 
       <Grid cols={2} gap={16} style={{ marginBottom:20 }}>
         {/* Live Stream */}

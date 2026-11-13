@@ -33,6 +33,19 @@ $env:SARVAM_API_KEY = "your-sarvam-api-key"
 python app.py
 ```
 
+For Spring-style deployment environments, `KAVACHOPSAI_SARVAM_API_KEY` is also
+accepted. It corresponds to the property name
+`kavachopsai.sarvam.api-key`; set it as an environment variable for the Python
+process rather than adding the secret to source-controlled configuration.
+
+Run the standalone Sarvam example from this directory with:
+
+```powershell
+python sarvam-api.py
+```
+
+It uses `glm5.3` by default; set `SARVAM_MODEL` to override it.
+
 The server reads `ML_APP_HOST` (default `0.0.0.0`) and `ML_APP_PORT` (default
 `5000`). For local-only access, set `ML_APP_HOST` to `127.0.0.1`. For deployment,
 run with a production WSGI server such as Gunicorn rather than Flask's built-in
@@ -42,8 +55,9 @@ Optional configuration:
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `SARVAM_API_KEY` | Server-side key for Sarvam chat requests | Not configured |
-| `SARVAM_MODEL` | Default Sarvam chat model | `sarvam-105b` |
+| `SARVAM_API_KEY` / `KAVACHOPSAI_SARVAM_API_KEY` | Server-side key for Sarvam requests | Not configured |
+| `SARVAM_MODEL` | Default Sarvam chat model | `glm5.3` |
+| `SARVAM_ANALYSIS_MODEL` | Model used for anomaly/malware assessments and PDF reports | `glm5.3` |
 | `IDS_BASELINE_CSV` | CSV used to train the anomaly detector at startup | Not configured |
 | `ML_APP_HOST` | Flask bind address | `0.0.0.0` |
 | `ML_APP_PORT` | Flask port | `5000` |
@@ -54,14 +68,15 @@ available.
 
 ## Unified API
 
-All endpoints return JSON. Scan endpoints use paths on the server hosting this
-application.
+Endpoints return JSON unless noted; `/api/sarvam/report` returns a PDF
+attachment. Scan endpoints use paths on the server hosting this application.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `GET` | `/` | Service status and endpoint list |
 | `GET` | `/api/health` | Readiness of model integrations and Sarvam configuration |
 | `POST` | `/api/sarvam/chat` | Send a chat request to Sarvam |
+| `POST` | `/api/sarvam/report` | Generate a Sarvam-explained downloadable PDF from supplied analysis data |
 | `POST` | `/api/scan-file` | Malware scan; accepts YARA options for compatibility |
 | `POST` | `/api/malware/scan-file` | Malware model scan |
 | `POST` | `/api/yara/scan-file` | Scan a file with YARA rules |
@@ -84,7 +99,7 @@ Or send a conversation:
 
 ```json
 {
-  "model": "sarvam-105b",
+  "model": "glm5.3",
   "messages": [
     {"role": "system", "content": "Answer concisely."},
     {"role": "user", "content": "Summarize this alert"}
@@ -94,7 +109,47 @@ Or send a conversation:
 
 The response is the JSON response from Sarvam. The API key remains on the
 backend and is sent to Sarvam using the `api-subscription-key` header. The chat
-endpoint returns `503` if `SARVAM_API_KEY` is not configured.
+endpoint returns `503` if neither supported API-key environment variable is configured.
+
+### Sarvam-assisted detections and reports
+
+`/api/anomaly/detect`, `/api/anomaly/batch`, and the malware/YARA scan endpoints
+include a `sarvamAnalysis` assessment when Sarvam is configured. A suspicious AI
+assessment can elevate the final verdict, but an AI benign assessment never
+clears an anomaly, malware prediction, or YARA match. The original model result
+is retained in `model_anomaly` or `modelVerdict`. If Sarvam is unavailable or
+returns an invalid assessment, the response is marked `partial` and includes the
+reason; the deterministic result remains available.
+
+Malware analysis sends derived file metadata and model features to Sarvam, not
+the file bytes or full local path. Set `SARVAM_ANALYSIS_MODEL` to choose another
+model. Sarvam-assisted batch anomaly detection accepts up to 25 records.
+Anomaly records and the `data` submitted for a report are sent to Sarvam; do not
+include information that should not leave your environment.
+
+Generate a downloadable PDF by posting analysis data to `/api/sarvam/report`:
+
+```json
+{
+  "title": "Network anomaly report",
+  "data": {
+    "period": "2026-11-14",
+    "detections": [
+      {
+        "anomaly": true,
+        "anomaly_score": -0.31,
+        "sarvamAnalysis": {
+          "assessment": "suspicious",
+          "summary": "The connection volume is unusual for this baseline."
+        }
+      }
+    ]
+  }
+}
+```
+
+The endpoint returns an `application/pdf` attachment. Reports are AI-generated
+and should be reviewed before taking action.
 
 ### File scanning
 

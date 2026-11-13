@@ -132,6 +132,11 @@ export const events = {
   getEvents:         (ch="",lv="",p=0,s=50) => call(`/events?channel=${ch}&level=${lv}&page=${p}&size=${s}`),
   getStats:          ()                      => call("/events/stats"),
   getSecurityEvents: (limit=50)              => call(`/events/security?limit=${limit}`),
+  analyzeWithSarvam: (options={})            => call("/events/sarvam/analyze", {
+    method: "POST",
+    body: JSON.stringify(options),
+    timeout: 90000,
+  }),
   readerStatus:      ()                      => call("/events/reader/status"),
   getCatalogStatus:  ()                      => call("/events/catalog/status"),
   getCatalogEntry:   (eventId)               => call(`/events/catalog/${eventId}`),

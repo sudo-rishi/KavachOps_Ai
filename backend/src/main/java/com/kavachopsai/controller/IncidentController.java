@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
@@ -20,8 +21,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.kavachopsai.model.WindowsEventLog;
 import com.kavachopsai.service.IncidentService;
 import com.kavachopsai.service.MalwareDetectionService;
+import com.kavachopsai.service.SarvamWindowsEventService;
 import com.kavachopsai.service.WindowsEventService;
 import com.kavachopsai.windows.WindowsEventLogReader;
 
@@ -126,6 +129,7 @@ class WindowsEventController {
 
     private final WindowsEventService windowsEventService;
     private final WindowsEventLogReader eventReader;
+    private final SarvamWindowsEventService sarvamWindowsEventService;
 
     @GetMapping
     public ResponseEntity<?> getEvents(
@@ -145,6 +149,40 @@ class WindowsEventController {
     public ResponseEntity<?> getSecurityEvents(
             @RequestParam(defaultValue = "50") int limit) {
         return ResponseEntity.ok(windowsEventService.getRecentSecurityEvents(limit));
+    }
+
+    @PostMapping("/sarvam/analyze")
+    public ResponseEntity<?> analyzeWithSarvam(@RequestBody(required = false) Map<String, Object> body) {
+        Map<String, Object> request = body == null ? Map.of() : body;
+        Object questionValue = request.get("question");
+        if (questionValue != null
+                && (!(questionValue instanceof String) || ((String) questionValue).length() > 500)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "question must be at most 500 characters"));
+        }
+        String question = questionValue == null ? "" : ((String) questionValue).trim();
+
+        String scope = String.valueOf(request.getOrDefault("scope", "security")).trim().toLowerCase();
+        if (!scope.equals("security") && !scope.equals("all")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "scope must be 'security' or 'all'"));
+        }
+
+        int limit = 50;
+        Object limitValue = request.get("limit");
+        if (limitValue != null) {
+            if (!(limitValue instanceof Number)) {
+                return ResponseEntity.badRequest().body(Map.of("error", "limit must be an integer from 1 to 50"));
+            }
+            double value = ((Number) limitValue).doubleValue();
+            if (!Double.isFinite(value) || value != Math.rint(value) || value < 1 || value > 50) {
+                return ResponseEntity.badRequest().body(Map.of("error", "limit must be an integer from 1 to 50"));
+            }
+            limit = (int) value;
+        }
+
+        List<WindowsEventLog> events = scope.equals("security")
+                ? windowsEventService.getRecentSecurityEvents(limit)
+                : windowsEventService.getEvents(null, null, 0, limit).getContent();
+        return ResponseEntity.ok(sarvamWindowsEventService.analyze(events, question, scope));
     }
 
     @GetMapping("/reader/status")
