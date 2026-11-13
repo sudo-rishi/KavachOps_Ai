@@ -1,4 +1,4 @@
-// Shield-God Design System
+// KavachOps AI Design System
 // Light professional SOC theme with restrained blue/teal accents.
 
 export const colors = {

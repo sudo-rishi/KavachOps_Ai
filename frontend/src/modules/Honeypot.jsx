@@ -104,7 +104,7 @@ export default function Honeypot({ appState, onDeployHoneypot, onToggleHoneypot,
         <Panel title="Deployed Honeypots" subtitle="Active deception infrastructure"
           actions={<Btn size="sm" variant="primary" onClick={() => setDeployModal(true)}>+ Deploy</Btn>}>
           {honeypots.length === 0 ? (
-            <EmptyState icon="🍯" title="No honeypots deployed" sub="Deploy traps to lure and profile attackers" />
+            <EmptyState icon="honeypot" title="No honeypots deployed" sub="Deploy traps to lure and profile attackers" />
           ) : (
             honeypots.map(hp => (
               <div key={hp.honeypotId} style={{

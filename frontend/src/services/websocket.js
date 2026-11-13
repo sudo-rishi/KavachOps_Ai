@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-//  Shield-God WebSocket Service
+//  KavachOps AI WebSocket Service
 //  STOMP over SockJS → Spring Boot /api/ws
 //  Topics mirrored from AlertBroadcaster.java
 // ═══════════════════════════════════════════════════════════════

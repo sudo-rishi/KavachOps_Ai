@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-//  Shield-God Root App
+//  KavachOps AI Root App
 //  Real connections only — no simulation fallback.
 //  • Login → JWT → WebSocket → auto-start capture
 //  • Offline backend → OfflineScreen (hard block)
@@ -192,7 +192,7 @@ export default function App() {
             boxShadow:"0 10px 26px rgba(31,95,217,0.28)",
           }}>SG</div>
           <div style={{ fontFamily:"var(--font-display)", fontSize:18, fontWeight:800,
-            color:"#0f172a", letterSpacing:"-.04em" }}>Shield-God</div>
+            color:"#0f172a", letterSpacing:"-.04em" }}>KavachOps AI</div>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <span style={{ animation:"spin 1s linear infinite", display:"inline-block",
               fontSize:16, color:"#2d6bff" }}>⟳</span>

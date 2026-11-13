@@ -1,4 +1,4 @@
-// Shield-God REST API Client
+// KavachOps AI REST API Client
 // Change VITE_API_BASE in .env.local for cross-machine deployment
 
 const env = import.meta?.env || {};

@@ -42,7 +42,7 @@ export default function AppFooter() {
       color: "#334155",
       fontFamily: "var(--font-mono)",
     }}>
-      <span>Shield-God SOC Platform · FE v{frontendVersion} · BE v{backendVersion}</span>
+      <span>KavachOps AI SOC Platform · FE v{frontendVersion} · BE v{backendVersion}</span>
       <span>TM {year} KavachOps AI Security Systems. All rights reserved.</span>
       <span>Support: security@KavachOpsAI.local</span>
     </footer>
