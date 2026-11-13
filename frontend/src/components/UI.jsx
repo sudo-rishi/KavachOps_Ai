@@ -207,14 +207,15 @@ function inferPanelAccent(title) {
 }
 
 // ── Panel ────────────────────────────────────────────────────────
-export function Panel({ title, subtitle, actions, children, padding = "0", accent }) {
+export function Panel({ title, subtitle, actions, children, padding = "0", accent, style = {} }) {
   const panelAccent = accent || inferPanelAccent(title);
+  const cardStyle = panelAccent ? {
+    borderColor: `${panelAccent}35`,
+    boxShadow: `0 4px 14px ${panelAccent}10`,
+    background: `linear-gradient(135deg, #ffffff 0%, ${panelAccent}08 100%)`,
+  } : {};
   return (
-    <Card padding="0" style={panelAccent ? {
-      borderColor: `${panelAccent}35`,
-      boxShadow: `0 4px 14px ${panelAccent}10`,
-      background: `linear-gradient(135deg, #ffffff 0%, ${panelAccent}08 100%)`,
-    } : {}}>
+    <Card padding="0" style={{ ...cardStyle, ...style }}>
       {(title || actions) && (
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",

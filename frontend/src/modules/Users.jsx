@@ -40,11 +40,33 @@ function Avatar({ username, size = 32 }) {
   );
 }
 
-export default function Users({ appState, onAddUser, onToast }) {
+export default function Users({ appState, onAddUser, onToggleUser, onToast }) {
   const { users } = appState;
   const [addModal, setAddModal] = useState(false);
   const [viewUser, setViewUser] = useState(null);
   const [newUser, setNewUser]   = useState({ username:"", email:"", role:"analyst", password:"" });
+  const [savingUser, setSavingUser] = useState(false);
+
+  const createUser = async () => {
+    if (!newUser.username.trim() || !newUser.email.trim()) {
+      onToast("Username and email required", "warning");
+      return;
+    }
+    if (newUser.password.length < 8) {
+      onToast("Password must be at least 8 characters", "warning");
+      return;
+    }
+    setSavingUser(true);
+    try {
+      await onAddUser(newUser);
+      setAddModal(false);
+      setNewUser({ username:"", email:"", role:"analyst", password:"" });
+    } catch (err) {
+      onToast(`Unable to create user: ${err.message || "unknown error"}`, "error");
+    } finally {
+      setSavingUser(false);
+    }
+  };
 
   const active   = users.filter(u => u.active).length;
   const inactive = users.filter(u => !u.active).length;
@@ -132,7 +154,7 @@ export default function Users({ appState, onAddUser, onToast }) {
               <div style={{ display:"flex", gap:6 }}>
                 <Btn size="xs" variant="ghost" onClick={() => setViewUser(r)}>View</Btn>
                 <Btn size="xs" variant={r.active ? "ghost" : "success"}
-                  onClick={() => onToast(`User ${r.username} ${r.active?"disabled":"enabled"}`, r.active?"warning":"success")}
+                  onClick={() => onToggleUser(r.userId, !r.active).catch(err => onToast(`Unable to update user: ${err.message}`, "error"))}
                   style={r.active ? { color:"#e11d48", borderColor:"#fecdd3" } : {}}>
                   {r.active ? "Disable" : "Enable"}
                 </Btn>
@@ -182,15 +204,10 @@ export default function Users({ appState, onAddUser, onToast }) {
       {/* Add User Modal */}
       <Modal open={addModal} onClose={() => setAddModal(false)} title="Add New User"
         footer={<>
-          <Btn variant="ghost" onClick={() => setAddModal(false)}>Cancel</Btn>
-          <Btn variant="primary" onClick={() => {
-            if (!newUser.username.trim() || !newUser.email.trim()) { onToast("Username and email required", "warning"); return; }
-            if (newUser.password.length < 8) { onToast("Password must be at least 8 characters", "warning"); return; }
-            onAddUser({ ...newUser, userId: Date.now(), active:true, createdAt:new Date().toISOString(), lastLogin:null });
-            setAddModal(false);
-            setNewUser({ username:"", email:"", role:"analyst", password:"" });
-            onToast(`User "${newUser.username}" created successfully`, "success");
-          }}>Create User</Btn>
+          <Btn variant="ghost" onClick={() => setAddModal(false)} disabled={savingUser}>Cancel</Btn>
+          <Btn variant="primary" onClick={createUser} disabled={savingUser}>
+            {savingUser ? "Creating…" : "Create User"}
+          </Btn>
         </>}>
         <Grid cols={2} gap={12}>
           <FormGroup label="Username">
@@ -209,7 +226,7 @@ export default function Users({ appState, onAddUser, onToast }) {
         <FormGroup label="Email Address">
           <input type="email" value={newUser.email} onChange={e => setNewUser(p=>({...p,email:e.target.value}))} placeholder="user@shieldgod.local" />
         </FormGroup>
-        <FormGroup label="Password" hint="Minimum 8 characters. Must include letters and numbers.">
+        <FormGroup label="Password" hint="Use a unique password of at least 8 characters.">
           <input type="password" value={newUser.password} onChange={e => setNewUser(p=>({...p,password:e.target.value}))} placeholder="••••••••••" />
         </FormGroup>
       </Modal>

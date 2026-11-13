@@ -10,7 +10,6 @@ function normalizeBaseUrl(value, fallback) {
 }
 
 export const API_BASE = normalizeBaseUrl(env.VITE_API_BASE, "/api");
-export const ML_BASE  = normalizeBaseUrl(env.VITE_ML_BASE, "http://localhost:5000");
 
 const TOKEN_KEY = "shieldgod.accessToken";
 let _token = null;
@@ -98,9 +97,7 @@ export async function checkHealth() {
 }
 
 export async function checkMlHealth() {
-  const res = await fetch(`${ML_BASE}/api/health`, { signal: AbortSignal.timeout(4000) });
-  if (!res.ok) throw new ApiError(res.status, "ML service unavailable");
-  return res.json();
+  return call("/ml/health", { timeout: 6000 });
 }
 
 export const auth = {
@@ -178,6 +175,15 @@ export const vulnerability = {
   getFindings:   (sv="",st="",p=0,s=50)=> call(`/vulnerability/findings?severity=${sv}&status=${st}&page=${p}&size=${s}`),
   updateFinding: (id,status)           => call(`/vulnerability/findings/${id}/status`,{ method:"PATCH", body: JSON.stringify({ status }) }),
   getStats:      ()                    => call("/vulnerability/stats"),
+  getCveStatus:  ()                    => call("/vulnerability/cve/status"),
+  searchCves:    (query="",p=0,s=25)   => call(`/vulnerability/cve?q=${encodeURIComponent(query)}&page=${p}&size=${s}`),
+  importCves:    ()                    => call("/vulnerability/cve/import", { method:"POST" }),
+};
+
+export const users = {
+  getAll:       ()             => call("/admin/users"),
+  create:       (data)         => call("/admin/users", { method:"POST", body: JSON.stringify(data) }),
+  setActive:    (id, active)   => call(`/admin/users/${id}/active`, { method:"PATCH", body: JSON.stringify({ active }) }),
 };
 
 export const reports = {
@@ -196,6 +202,11 @@ export const reports = {
     const query = params.toString();
     return callBlob(`/reports/vulnerability/pdf${query ? `?${query}` : ""}`);
   },
+  generateSarvamPdf: ({ title, data }) => callBlob("/ml/sarvam/report", {
+    method: "POST",
+    body: JSON.stringify({ title, data }),
+    timeout: 90000,
+  }),
 };
 
 export const honeypots = {
@@ -209,8 +220,9 @@ export const honeypots = {
 
 export const ml = {
   health:        ()             => checkMlHealth(),
-  detectAnomaly: (record)       => call("/api/anomaly/detect",  { method:"POST", body: JSON.stringify(record),           timeout:12000 }, ML_BASE),
-  batchAnomaly:  (records)      => call("/api/anomaly/batch",   { method:"POST", body: JSON.stringify({ records }),       timeout:20000 }, ML_BASE),
-  analyzeFile:   (fileInfo)     => call("/api/malware/analyze", { method:"POST", body: JSON.stringify(fileInfo),          timeout:20000 }, ML_BASE),
-  retrain:       (t,s,l)        => call("/api/model/retrain",   { method:"POST", body: JSON.stringify({type:t,samples:s,labels:l}), timeout:30000 }, ML_BASE),
+  detectAnomaly: (record)       => call("/ml/anomaly/detect", { method:"POST", body: JSON.stringify({ record }), timeout:20000 }),
+  batchAnomaly:  (records)      => call("/ml/anomaly/batch", { method:"POST", body: JSON.stringify({ records }), timeout:90000 }),
+  trainAnomaly:  (records)      => call("/ml/anomaly/train", { method:"POST", body: JSON.stringify({ records }), timeout:90000 }),
+  analyzeFile:   (fileInfo)     => call("/ml/malware/analyze", { method:"POST", body: JSON.stringify(fileInfo), timeout:90000 }),
+  retrain:       (t,s,l)        => call("/ml/anomaly/train", { method:"POST", body: JSON.stringify({ type:t, samples:s, labels:l }), timeout:90000 }),
 };

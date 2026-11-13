@@ -466,6 +466,74 @@ export default function Reports({ appState, onToast }) {
     }
   };
 
+  const generateSarvamReport = async () => {
+    if (generating) return;
+    setGenerating("sarvam");
+    try {
+      const recentAlerts = alerts.slice(0, 20).map(({ severity, alertType, status, timestamp }) => ({
+        severity, type: alertType, status, timestamp,
+      }));
+      const recentIncidents = incidents.slice(0, 20).map(({ severity, status, category, createdAt }) => ({
+        severity, status, category, createdAt,
+      }));
+      const recentMalware = malwareScans.slice(0, 20).map((scan) => ({
+        verdict: scan.scanResult,
+        threat: scan.threatName || null,
+        engine: scan.scanEngine || null,
+        virustotalPositives: scan.virustotalPositives || 0,
+        virustotalTotal: scan.virustotalTotal || 0,
+      }));
+      const recentVulnerabilities = vulnFindings.slice(0, 20).map(({ severity, status, cveId, cvssScore, vulnerabilityName }) => ({
+        severity, status, cveId, cvssScore, vulnerability: vulnerabilityName,
+      }));
+      const winEvents = appState.winEvents || [];
+      const eventLevels = winEvents.reduce((counts, event) => {
+        const level = String(event.level || "unknown");
+        counts[level] = (counts[level] || 0) + 1;
+        return counts;
+      }, {});
+      const data = {
+        generatedAt: now().toISOString(),
+        summary: {
+          alerts: alerts.length,
+          openIncidents: incidents.filter(item => ["open", "investigating"].includes(item.status)).length,
+          infectedFiles: malwareScans.filter(item => item.scanResult === "infected").length,
+          criticalVulnerabilities: vulnFindings.filter(item => item.severity === "critical").length,
+          windowsEvents: winEvents.length,
+          securityRelevantWindowsEvents: winEvents.filter(item => item.securityRelevant).length,
+          anomalyModel: appState.mlStatus?.services?.anomaly?.ready ? "ready" : "not ready",
+        },
+        recentAlerts,
+        recentIncidents,
+        recentMalware,
+        recentVulnerabilities,
+        windowsEventLevels: eventLevels,
+      };
+      const { blob, fileName } = await reportsApi.generateSarvamPdf({
+        title: "KavachOps AI Security Assessment",
+        data,
+      });
+      const name = fileName || `KavachOps_AI_Sarvam_Report_${fmtISODate(now())}.pdf`;
+      const saved = await saveBlobWithPicker(blob, name, "application/pdf").catch(() => false);
+      if (!saved) triggerBrowserDownload(blob, name);
+      setGenerated(p => [{
+        id: Date.now(),
+        name,
+        type: "sarvam",
+        format: "pdf",
+        size: `${Math.max(1, Math.round(blob.size / 1024))} KB`,
+        generatedAt: now().toISOString(),
+        status: "completed",
+        blob,
+      }, ...p]);
+      onToast("Sarvam explanatory report generated and downloaded", "success");
+    } catch (err) {
+      onToast(`Sarvam report failed: ${err.message || "unknown error"}`, "error");
+    } finally {
+      setGenerating(null);
+    }
+  };
+
   const syncedSummary = synced30d?.summary || {};
   const stats = [
     { icon:"🚨", label:"Alerts (30d)",    value: syncedSummary.alerts ?? alerts.length, color:"#e11d48" },
@@ -564,6 +632,20 @@ export default function Reports({ appState, onToast }) {
           )}
         </Panel>
       </Grid>
+
+      <Panel
+        title="Sarvam AI Explanation"
+        subtitle="Generate a narrative PDF from the current security summary"
+        style={{ marginBottom:20 }}
+        actions={<Btn size="sm" variant="primary" onClick={generateSarvamReport} disabled={!!generating}>
+          {generating === "sarvam" ? "Generating…" : "Generate AI report"}
+        </Btn>}
+      >
+        <div style={{ padding:"10px 18px", color:"var(--color-text-secondary)", fontSize:12, lineHeight:1.55 }}>
+          The report sends aggregated counts and limited recent alert, incident, malware, and vulnerability metadata to Sarvam.
+          Raw Windows event messages, usernames, file paths, hashes, and host IPs are excluded.
+        </div>
+      </Panel>
 
       <Grid cols={2} gap={16}>
         {/* Templates */}

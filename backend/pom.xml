@@ -18,13 +18,13 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <start-class>com.kavachopsai.KavachOpsAi</start-class>
-        <java.version>25</java.version>
+        <java.version>21</java.version>
         <!-- Dependency Versions -->
         <pcap4j.version>1.8.2</pcap4j.version>
         <hibernate.version>7.3.0.Final</hibernate.version>
         <jjwt.version>0.12.7</jjwt.version>
         <jna.version>5.14.0</jna.version>
-        <lombok.version>1.18.38</lombok.version>
+        <lombok.version>1.18.40</lombok.version>
         <swagger-models.version>2.2.31</swagger-models.version>
         <commons-csv.version>1.13.0</commons-csv.version>
     </properties>

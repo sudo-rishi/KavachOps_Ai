@@ -748,6 +748,7 @@ def index():
                 "/api/anomaly/batch",
                 "/api/anomaly/train",
                 "/api/model/retrain",
+                "/api/malware/analyze",
             ],
         }
     )
@@ -893,6 +894,52 @@ def sarvam_report():
     )
 
 
+@app.route("/api/malware/analyze", methods=["POST"])
+def malware_analyze():
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "A JSON object is required"}), 400
+
+    file_name = body.get("fileName")
+    scan_result = body.get("scanResult")
+    if not isinstance(file_name, str) or not file_name.strip() or len(file_name) > 255:
+        return jsonify({"error": "fileName must be a non-empty string of at most 255 characters"}), 400
+    if not isinstance(scan_result, str) or scan_result.strip().lower() not in {
+        "clean", "suspicious", "infected", "error"
+    }:
+        return jsonify({"error": "scanResult must be clean, suspicious, infected, or error"}), 400
+
+    raw_file_size = body.get("fileSize")
+    if isinstance(raw_file_size, bool):
+        return jsonify({"error": "fileSize must be a non-negative finite number"}), 400
+    file_size = _safe_float(raw_file_size)
+    if not isfinite(file_size) or file_size < 0:
+        return jsonify({"error": "fileSize must be a non-negative finite number"}), 400
+
+    evidence = {
+        "fileName": file_name.strip(),
+        "fileSize": file_size,
+        "sha256": str(body.get("fileHash", ""))[:128],
+        "deterministicScanResult": scan_result.strip().lower(),
+        "threatName": str(body.get("threatName", ""))[:500],
+        "scanEngine": str(body.get("scanEngine", ""))[:100],
+        "yaraRuleMatched": str(body.get("yaraRuleMatched", ""))[:500],
+        "virustotalPositives": body.get("virustotalPositives"),
+        "virustotalTotal": body.get("virustotalTotal"),
+    }
+
+    try:
+        assessment = _sarvam_assess("malware_scan", evidence)
+    except SarvamServiceError as ex:
+        return jsonify({"error": str(ex)}), ex.status_code
+
+    return jsonify({
+        "status": "ok",
+        "deterministicResult": scan_result.strip().lower(),
+        "sarvamAnalysis": assessment,
+    })
+
+
 @app.route("/api/malware/scan-file", methods=["POST"])
 @app.route("/api/scan-file", methods=["POST"])
 def malware_or_compat_scan_file():
@@ -992,8 +1039,21 @@ def anomaly_detect():
             )
 
         detections = _anomaly_service.detect(pd.DataFrame(records))
-        enriched, sarvam_status = _enrich_anomaly_results(records[:1], detections[:1])
-        first = enriched[0] if enriched else {"anomaly": False, "anomaly_score": 0.0}
+        first_detection = detections[0] if detections else {"anomaly": False, "anomaly_score": 0.0}
+        if body.get("includeSarvam") is True:
+            enriched, sarvam_status = _enrich_anomaly_results(records[:1], detections[:1])
+            first = enriched[0] if enriched else first_detection
+        else:
+            first = {
+                **first_detection,
+                "model_anomaly": False,
+                "finalVerdict": "normal",
+                "sarvamAnalysis": {
+                    "status": "skipped",
+                    "reason": "Sarvam reviews model-positive detections or explicit review requests",
+                },
+            }
+            sarvam_status = "model-only"
 
         return (
             jsonify(
@@ -1086,6 +1146,6 @@ def model_retrain():
 
 
 if __name__ == "__main__":
-    host = os.getenv("ML_APP_HOST", "0.0.0.0")
+    host = os.getenv("ML_APP_HOST", "127.0.0.1")
     port = int(os.getenv("ML_APP_PORT", "5000"))
     app.run(host=host, port=port, debug=False)

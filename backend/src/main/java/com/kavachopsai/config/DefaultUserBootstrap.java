@@ -1,6 +1,7 @@
 package com.kavachopsai.config;
 
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -19,22 +20,34 @@ public class DefaultUserBootstrap {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
+    @Value("${kavachopsai.bootstrap.admin.enabled:false}")
+    private boolean bootstrapEnabled;
+
+    @Value("${kavachopsai.bootstrap.admin.username:admin}")
+    private String username;
+
+    @Value("${kavachopsai.bootstrap.admin.email:admin@kavachopsai.local}")
+    private String email;
+
+    @Value("${kavachopsai.bootstrap.admin.password:}")
+    private String password;
+
     @Bean
     public ApplicationRunner ensureDefaultAdminUser() {
         return args -> {
-            String username = "admin";
-            String email = "admin@kavachopsai.local";
-            String password = "password";
-
+            if (!bootstrapEnabled) {
+                log.info("Admin bootstrap is disabled.");
+                return;
+            }
+            if (password == null || password.length() < 12) {
+                throw new IllegalStateException(
+                        "Set KAVACHOPSAI_BOOTSTRAP_ADMIN_PASSWORD to a unique password of at least 12 characters");
+            }
+            if (username == null || username.isBlank() || email == null || email.isBlank()) {
+                throw new IllegalStateException("Bootstrap admin username and email must be configured");
+            }
             if (userRepository.findByUsername(username).isPresent()) {
-                User existing = userRepository.findByUsername(username).get();
-                if (!passwordEncoder.matches(password, existing.getPasswordHash())) {
-                    existing.setPasswordHash(passwordEncoder.encode(password));
-                    existing.setRole("admin");
-                    existing.setActive(true);
-                    userRepository.save(existing);
-                    log.info("Updated default admin password to the documented value.");
-                }
+                log.info("Bootstrap admin '{}' already exists; leaving its credentials and role unchanged.", username);
                 return;
             }
 
@@ -48,7 +61,7 @@ public class DefaultUserBootstrap {
                 .build();
 
             userRepository.save(user);
-            log.info("Created default admin user: {} / password", username);
+            log.info("Created bootstrap admin user '{}'.", username);
         };
     }
 }

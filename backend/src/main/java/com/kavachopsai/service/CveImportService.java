@@ -9,6 +9,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -33,10 +34,10 @@ public class CveImportService {
     private final JdbcTemplate jdbcTemplate;
     private final CveDatabaseRepository cveRepo;
 
-    @Value("${kavachopsai.cve.auto-import:true}")
+    @Value("${kavachopsai.cve.auto-import:false}")
     private boolean autoImport;
 
-    @Value("${kavachopsai.cve.dataset-path:../datasets for traing/cve_data.csv}")
+    @Value("${kavachopsai.cve.dataset-path:dataset/nvd_vulnerabilities_with_os.csv}")
     private String datasetPath;
 
     private static final int BATCH_SIZE = 1000;
@@ -53,11 +54,24 @@ public class CveImportService {
         }
 
         try {
-            int imported = importFromCsv(Path.of(datasetPath));
-            log.info("Imported {} CVE records from dataset: {}", imported, datasetPath);
+            int imported = importConfiguredDataset();
+            log.info("Imported {} CVE records from dataset: {}", imported, resolveDatasetPath());
         } catch (Exception e) {
             log.warn("CVE import failed at startup: {}", e.getMessage());
         }
+    }
+
+    public int importConfiguredDataset() {
+        return importFromCsv(resolveDatasetPath());
+    }
+
+    public Map<String, Object> getDatasetStatus() {
+        Path path = resolveDatasetPath();
+        return Map.of(
+                "dataset", path.getFileName() == null ? "configured CVE dataset" : path.getFileName().toString(),
+                "available", Files.isRegularFile(path),
+                "recordCount", cveRepo.count(),
+                "autoImport", autoImport);
     }
 
     public int importFromCsv(Path csvPath) {
@@ -88,7 +102,7 @@ public class CveImportService {
                  .parse(br)) {
 
             for (CSVRecord r : parser) {
-                String cveId = firstPresent(r, "CVE", "cve", "cve_id");
+                String cveId = firstPresent(r, "CVE ID", "CVE_ID", "CVE", "cve", "cve_id");
                 if (!StringUtils.hasText(cveId)) {
                     continue;
                 }
@@ -97,9 +111,14 @@ public class CveImportService {
                     continue;
                 }
 
-                String desc = truncate(firstPresent(r, "details", "description", "desc"), 4000);
-                LocalDate published = parseDate(firstPresent(r, "date", "published_date", "published"));
-                BigDecimal cvss = parseCvss(firstPresent(r, "cvss_score", "cvss", "Severity", "severity"));
+                String desc = firstPresent(r, "Description", "details", "description", "desc");
+                String affectedOs = firstPresent(r, "Affected OS", "affected_os");
+                if (StringUtils.hasText(affectedOs)) {
+                    desc = StringUtils.hasText(desc) ? desc + " Affected OS: " + affectedOs : "Affected OS: " + affectedOs;
+                }
+                desc = truncate(desc, 4000);
+                LocalDate published = parseDate(firstPresent(r, "Published Date", "date", "published_date", "published"));
+                BigDecimal cvss = parseCvss(firstPresent(r, "CVSS Score", "cvss_score", "cvss", "Severity", "severity"));
                 String ref = firstPresent(r, "reference", "references", "url", "link");
                 String[] refs = StringUtils.hasText(ref) ? new String[]{ref.trim()} : null;
 
@@ -178,6 +197,22 @@ public class CveImportService {
     private String truncate(String text, int max) {
         if (text == null) return null;
         return text.length() <= max ? text : text.substring(0, max);
+    }
+
+    private Path resolveDatasetPath() {
+        Path configured = Path.of(datasetPath);
+        if (configured.isAbsolute()) {
+            return configured.normalize();
+        }
+
+        Path directory = Path.of("").toAbsolutePath().normalize();
+        for (Path ancestor = directory; ancestor != null; ancestor = ancestor.getParent()) {
+            Path candidate = ancestor.resolve(configured).normalize();
+            if (Files.isRegularFile(candidate)) {
+                return candidate;
+            }
+        }
+        return directory.resolve(configured).normalize();
     }
 
     private record CveRow(

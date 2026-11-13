@@ -10,6 +10,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   setToken, clearToken, getToken,
+  checkHealth,
   auth as authApi,
   network  as networkApi,
   events   as eventsApi,
@@ -19,6 +20,7 @@ import {
   honeypots as hpApi,
   dashboard as dashApi,
   ml        as mlApi,
+  users     as usersApi,
 } from "../api/client.js";
 import { ws, TOPICS } from "../services/websocket.js";
 import { fmtTime } from "../utils/dateFormatter.js";
@@ -27,77 +29,6 @@ const SYNC_MS   = 15_000;   // REST sync interval
 const HEALTH_MS = 10_000;   // health check interval
 const FEED_MAX = 60;
 const TRAFFIC_FEED_INTERVAL = 25;
-
-const MLTEST_FEATURE_COLUMNS = [
-  "state", "usage_counter", "prio", "static_prio", "normal_prio",
-  "policy", "vm_pgoff", "vm_truncate_count", "task_size",
-  "cached_hole_size", "free_area_cache", "mm_users", "map_count",
-  "hiwater_rss", "total_vm", "shared_vm", "exec_vm", "reserved_vm",
-  "nr_ptes", "end_data", "last_interval", "nvcsw", "nivcsw",
-  "min_flt", "maj_flt", "fs_excl_counter", "lock", "utime",
-  "stime", "gtime", "cgtime", "signal_nvcsw",
-];
-
-function toFiniteNumber(value, fallback = 0) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function hashChunk(hash = "", start = 0, len = 8) {
-  const chunk = String(hash).slice(start, start + len).padEnd(len, "0");
-  const parsed = parseInt(chunk, 16);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function buildMlTestFeatures(scan = {}) {
-  const fileSize = Math.max(0, toFiniteNumber(scan.fileSize, 0));
-  const hash = String(scan.fileHash || "").toLowerCase();
-
-  const derived = {
-    state: 0,
-    usage_counter: hashChunk(hash, 0, 8),
-    prio: fileSize % 65536,
-    static_prio: 0,
-    normal_prio: 0,
-    policy: 0,
-    vm_pgoff: hashChunk(hash, 8, 8),
-    vm_truncate_count: 0,
-    task_size: fileSize,
-    cached_hole_size: fileSize % 1024,
-    free_area_cache: hashChunk(hash, 16, 6) % 1000000,
-    mm_users: (hashChunk(hash, 22, 4) % 10000) + 1,
-    map_count: Math.max(1, Math.floor(fileSize / 4096)),
-    hiwater_rss: Math.max(1, Math.floor(fileSize / 1024)),
-    total_vm: Math.max(1, Math.floor(fileSize / 512)),
-    shared_vm: Math.max(0, Math.floor(fileSize / 2048)),
-    exec_vm: Math.max(0, Math.floor(fileSize / 8192)),
-    reserved_vm: 0,
-    nr_ptes: Math.max(1, Math.floor(fileSize / 16384)),
-    end_data: hashChunk(hash, 26, 6) % 1000000,
-    last_interval: hashChunk(hash, 32, 8),
-    nvcsw: hashChunk(hash, 40, 4) % 100000,
-    nivcsw: hashChunk(hash, 44, 4) % 100000,
-    min_flt: Math.max(0, Math.floor(fileSize / 8192)),
-    maj_flt: Math.max(0, Math.floor(fileSize / (1024 * 1024))),
-    fs_excl_counter: hashChunk(hash, 48, 8),
-    lock: hashChunk(hash, 56, 6) % 1000000,
-    utime: Math.max(0, Math.floor(fileSize / 4096)),
-    stime: Math.max(0, Math.floor(fileSize / 32768)),
-    gtime: 0,
-    cgtime: 0,
-    signal_nvcsw: hashChunk(hash, 60, 4) % 100000,
-  };
-
-  // Allow backend-provided telemetry to override derived defaults when available.
-  const overrides = (scan.mlFeatures && typeof scan.mlFeatures === "object") ? scan.mlFeatures : {};
-  const merged = { ...derived, ...overrides };
-
-  const features = {};
-  for (const key of MLTEST_FEATURE_COLUMNS) {
-    features[key] = toFiniteNumber(merged[key], 0);
-  }
-  return features;
-}
 
 function normalizeFeedSeverity(input) {
   const raw = String(input || "").toUpperCase();
@@ -140,11 +71,13 @@ export function useRealtime() {
     dashStats:      null,
     honeypotStats:  null,
     mlStatus:       null,
+    mlError:        null,
   });
 
   const syncTimerRef   = useRef(null);
   const healthTimerRef = useRef(null);
   const pktCountRef    = useRef(0);
+  const lastMlCallRef  = useRef(0);
 
   // ── Helpers ─────────────────────────────────────────────────────
   const patch = useCallback((updates) => {
@@ -169,6 +102,7 @@ export function useRealtime() {
         ws.connect(existingToken);
 
         const mlStatus = await mlApi.health().catch(() => null);
+        setData(p => ({ ...p, mlStatus }));
 
         patchAuth({
           loading: false,
@@ -192,9 +126,11 @@ export function useRealtime() {
   const enrichWithMl = useCallback(async (trafficRecord) => {
     try {
       const result = await mlApi.detectAnomaly(trafficRecord);
+      setData(p => ({ ...p, mlError: null }));
       return result;
-    } catch {
-      return null; // ML call failed silently — don't break traffic flow
+    } catch (error) {
+      setData(p => ({ ...p, mlError: error.message || "Anomaly analysis failed" }));
+      return null;
     }
   }, []);
 
@@ -230,17 +166,18 @@ export function useRealtime() {
 
         // Optional ML enrichment
         let anomalyScore = null;
-        if (authState.mlOnline) {
+        const now = Date.now();
+        const sampledPacket = pktCountRef.current % TRAFFIC_FEED_INTERVAL === 0;
+        const rateLimitPassed = now - lastMlCallRef.current >= 1000;
+        if (authState.mlOnline && data.mlStatus?.services?.anomaly?.ready && sampledPacket && rateLimitPassed) {
+          lastMlCallRef.current = now;
           const ml = await enrichWithMl({
-            sourceIp:      pkt.sourceIp,
-            destinationIp: pkt.destinationIp,
             protocol:      pkt.protocol,
             sourcePort:    pkt.sourcePort,
             destinationPort: pkt.destPort,
             packetSize:    pkt.packetSize,
-            timestamp:     pkt.timestamp,
           });
-          anomalyScore = ml?.anomalyScore ?? null;
+          anomalyScore = ml?.anomaly_score ?? ml?.anomalyScore ?? null;
         }
 
         setData(p => ({
@@ -318,7 +255,7 @@ export function useRealtime() {
     ];
 
     return () => unsubs.forEach(u => u());
-  }, [authState.mlOnline, enrichWithMl, patchAuth]);
+  }, [authState.mlOnline, data.mlStatus?.services?.anomaly?.ready, enrichWithMl, patchAuth]);
 
   // ── Full REST sync ───────────────────────────────────────────────
   const syncAll = useCallback(async () => {
@@ -327,7 +264,7 @@ export function useRealtime() {
       const [
         alertsRes, incRes, eventsRes, malwareRes,
         rulesRes, vulnRes, hpRes, dashRes,
-        hpAttackersRes, hpStatsRes,
+        hpAttackersRes, hpStatsRes, usersRes,
       ] = await Promise.allSettled([
         networkApi.getAlerts("", 0, 100),
         incApi.getAll("", "", 0, 50),
@@ -339,6 +276,7 @@ export function useRealtime() {
         dashApi.stats(),
         hpApi.getAttackers(50),
         hpApi.getStats(),
+        usersApi.getAll(),
       ]);
 
       const extract = (r, fallback = []) =>
@@ -368,6 +306,7 @@ export function useRealtime() {
           honeypots:    extract(hpRes,      p.honeypots),
           dashStats:    dashRes.status === "fulfilled" ? dashRes.value : p.dashStats,
           attackers:    extract(hpAttackersRes, p.attackers),
+          users:        extract(usersRes, p.users),
           honeypotStats: hpStatsRes.status === "fulfilled" ? hpStatsRes.value : p.honeypotStats,
           feedItems: seededFeed.slice(0, FEED_MAX),
         };
@@ -487,6 +426,44 @@ export function useRealtime() {
       return actions.startCapture();
     },
     listInterfaces: () => networkApi.listInterfaces(),
+    trainAnomalyFromHistory: async () => {
+      const trafficPage = await networkApi.getTraffic(0, 500);
+      const trafficRows = trafficPage?.content ?? trafficPage ?? [];
+      const records = trafficRows.map(packet => ({
+        protocol: packet.protocol || "OTHER",
+        sourcePort: Number(packet.sourcePort) || 0,
+        destinationPort: Number(packet.destinationPort ?? packet.destPort) || 0,
+        packetSize: Number(packet.packetSize ?? packet.packetLength ?? packet.size) || 0,
+      })).filter(packet => packet.packetSize > 0);
+
+      if (records.length < 20) {
+        throw new Error("At least 20 stored traffic records are required to train the anomaly baseline");
+      }
+
+      const result = await mlApi.trainAnomaly(records);
+      const mlStatus = await mlApi.health();
+      patchAuth({ mlOnline: true });
+      setData(p => ({ ...p, mlStatus, mlError: null }));
+      return result;
+    },
+    reviewTrafficWithSarvam: async () => {
+      const trafficPage = await networkApi.getTraffic(0, 25);
+      const trafficRows = trafficPage?.content ?? trafficPage ?? [];
+      const records = trafficRows.map(packet => ({
+        protocol: packet.protocol || "OTHER",
+        sourcePort: Number(packet.sourcePort) || 0,
+        destinationPort: Number(packet.destinationPort ?? packet.destPort) || 0,
+        packetSize: Number(packet.packetSize ?? packet.packetLength ?? packet.size) || 0,
+      })).filter(packet => packet.packetSize > 0);
+
+      if (records.length === 0) {
+        throw new Error("No stored traffic records are available for Sarvam review");
+      }
+      if (!data.mlStatus?.services?.anomaly?.ready) {
+        throw new Error("Train the anomaly detector before requesting a Sarvam review");
+      }
+      return mlApi.batchAnomaly(records);
+    },
 
     // ── IDS Rules ────────────────────────────────────────────────────
     createRule: async (rule) => {
@@ -530,20 +507,33 @@ export function useRealtime() {
       // Backend YARA + heuristic scan
       const scan = await malwareApi.scanFile(filePath);
 
-      // ML enrichment if service is online
-      if (authState.mlOnline && scan) {
-        try {
-          const mlFeatures = buildMlTestFeatures(scan);
-          const mlResult = await mlApi.analyzeFile({
-            fileName:     scan.fileName,
-            fileSize:     scan.fileSize,
-            fileHash:     scan.fileHash,
-            features:     mlFeatures,
-            payloadSample: "",
-          });
-          scan._mlVerdict = mlResult;
-          scan._mlFeatures = mlFeatures;
-        } catch {}
+      // Sarvam receives scan metadata only; the deterministic scan verdict remains authoritative.
+      if (scan) {
+        if (!authState.mlOnline) {
+          scan._mlError = "Python ML service is offline";
+        } else if (data.mlStatus?.services?.sarvam?.configured !== true) {
+          scan._mlError = data.mlStatus?.services?.sarvam?.configured === false
+            ? "Sarvam API key is not configured in the Python service"
+            : "Sarvam readiness is unavailable; check the ML service status";
+        } else {
+          try {
+            const mlResult = await mlApi.analyzeFile({
+              fileName:     scan.fileName,
+              fileSize:     scan.fileSize,
+              fileHash:     scan.fileHash,
+              scanResult:   scan.scanResult,
+              threatName:   scan.threatName,
+              scanEngine:   scan.scanEngine,
+              yaraRuleMatched: scan.yaraRuleMatched,
+              virustotalPositives: scan.virustotalPositives,
+              virustotalTotal: scan.virustotalTotal,
+            });
+            scan._mlVerdict = mlResult;
+            setData(p => ({ ...p, mlError: null }));
+          } catch (error) {
+            scan._mlError = error.message || "Sarvam malware assessment failed";
+          }
+        }
       }
 
       setData(p => ({ ...p, malwareScans: [scan, ...p.malwareScans] }));
@@ -601,14 +591,31 @@ export function useRealtime() {
     },
 
     // ── Users ─────────────────────────────────────────────────────────
-    addUser: async (userData) => {
-      const created = await authApi.register(userData);
-      await syncAll(); // refresh user list
+    createUser: async (userData) => {
+      const created = await usersApi.create(userData);
+      setData(p => ({ ...p, users: [...p.users, created] }));
       return created;
+    },
+    setUserActive: async (userId, active) => {
+      const updated = await usersApi.setActive(userId, active);
+      setData(p => ({
+        ...p,
+        users: p.users.map(user => user.userId === userId ? { ...user, ...updated } : user),
+      }));
+      return updated;
     },
 
     // Force manual sync
     syncAll,
+    retryBackend: async () => {
+      try {
+        await checkHealth();
+        patchAuth({ error: null, connected: false, loading: false });
+      } catch (error) {
+        patchAuth({ error: error.message || "Backend health check failed", connected: false, loading: false });
+        throw error;
+      }
+    },
   };
 
   return { authState, data, actions };

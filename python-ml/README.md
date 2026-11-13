@@ -26,7 +26,9 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-Set the Sarvam key in the server environment (do not put it in source code):
+For the standalone chat example, add `SARVAM_API_KEY=` to the project-root
+`.env` file and paste the key there. `.env` is ignored by Git. The service itself
+reads the key from its process environment:
 
 ```powershell
 $env:SARVAM_API_KEY = "your-sarvam-api-key"
@@ -38,18 +40,45 @@ accepted. It corresponds to the property name
 `kavachopsai.sarvam.api-key`; set it as an environment variable for the Python
 process rather than adding the secret to source-controlled configuration.
 
+## Spring and frontend integration
+
+The browser calls the Spring API; Spring proxies authenticated `/api/ml/*`
+requests to the Python service. Set `PYTHON_ML_BASE_URL` when the services do
+not share the default local network. Keep the Python service on a private
+interface and do not expose its unauthenticated Flask routes publicly.
+
+The backend requires `KAVACHOPSAI_JWT_SECRET` (at least 32 bytes). On a new
+database, provision the first administrator explicitly by setting
+`KAVACHOPSAI_BOOTSTRAP_ADMIN_ENABLED=true` and a unique
+`KAVACHOPSAI_BOOTSTRAP_ADMIN_PASSWORD` of at least 12 characters, plus the
+optional username/email variables. Admin bootstrap is disabled by default and
+never resets an existing account's password or role.
+
+To start the local full stack from the project root, ensure PostgreSQL is
+running and the JWT secret is configured, then run
+`.\run-kavachops.ps1`. It opens the Python ML service, Spring API, and frontend
+in separate PowerShell windows; it does not start PostgreSQL or send a standalone
+Sarvam chat request.
+
+The CVE page imports `dataset/nvd_vulnerabilities_with_os.csv` only after an
+administrator selects **Import bundled dataset**. Startup auto-import is off by
+default; `KAVACHOPSAI_CVE_DATASET_PATH` can point to another trusted server-side
+CSV, and the browser cannot submit arbitrary filesystem paths.
+
 Run the standalone Sarvam example from this directory with:
 
 ```powershell
-python sarvam-api.py
+py -3.12 sarvam-api.py
 ```
 
-It uses `glm5.3` by default; set `SARVAM_MODEL` to override it.
+It reads `SARVAM_API_KEY` from the process environment or project-root `.env`
+and sends one chat completion request using `glm5.3`.
 
-The server reads `ML_APP_HOST` (default `0.0.0.0`) and `ML_APP_PORT` (default
-`5000`). For local-only access, set `ML_APP_HOST` to `127.0.0.1`. For deployment,
-run with a production WSGI server such as Gunicorn rather than Flask's built-in
-development server.
+The server reads `ML_APP_HOST` (default `127.0.0.1`) and `ML_APP_PORT` (default
+`5000`). If the services run in separate containers, bind Flask to a private
+container interface and restrict network access to the Java backend. For
+deployment, run with a production WSGI server such as Gunicorn rather than
+Flask's built-in development server.
 
 Optional configuration:
 
@@ -59,12 +88,25 @@ Optional configuration:
 | `SARVAM_MODEL` | Default Sarvam chat model | `glm5.3` |
 | `SARVAM_ANALYSIS_MODEL` | Model used for anomaly/malware assessments and PDF reports | `glm5.3` |
 | `IDS_BASELINE_CSV` | CSV used to train the anomaly detector at startup | Not configured |
-| `ML_APP_HOST` | Flask bind address | `0.0.0.0` |
+| `ML_APP_HOST` | Flask bind address | `127.0.0.1` |
 | `ML_APP_PORT` | Flask port | `5000` |
+| `PYTHON_ML_BASE_URL` | URL the authenticated Spring ML gateway uses | `http://localhost:5000` |
+| `KAVACHOPSAI_VIRUSTOTAL_API_KEY` | VirusTotal API key (or `kavachopsai.virustotal.api-key` in `.env`) | Not configured |
+| `KAVACHOPSAI_VIRUSTOTAL_ENABLED` | Explicitly enable VirusTotal lookups | `false` |
 
 If `IDS_BASELINE_CSV` is not set, train the anomaly detector through the API
 before requesting detections. Check `/api/health` to see which integrations are
 available.
+
+VirusTotal requests are hash/IP lookups only; files are not uploaded. Successful
+lookups are cached in-process for 24 hours, malware scan records are reused from
+the database, requests are spaced by at least 16 seconds, and each running
+backend instance is capped at 450 lookups per rolling 24 hours. HTTP 429
+responses pause requests, and invalid credentials disable further lookups until
+restart. These local guards do not increase VirusTotal account quotas. The
+standard free public API shown in the account page is not permitted for business
+workflows or commercial products; obtain an appropriately licensed plan before
+using VirusTotal that way.
 
 ## Unified API
 
@@ -79,11 +121,17 @@ attachment. Scan endpoints use paths on the server hosting this application.
 | `POST` | `/api/sarvam/report` | Generate a Sarvam-explained downloadable PDF from supplied analysis data |
 | `POST` | `/api/scan-file` | Malware scan; accepts YARA options for compatibility |
 | `POST` | `/api/malware/scan-file` | Malware model scan |
+| `POST` | `/api/malware/analyze` | Sarvam advisory analysis of scan metadata |
 | `POST` | `/api/yara/scan-file` | Scan a file with YARA rules |
 | `POST` | `/api/anomaly/train` | Train the anomaly detector |
 | `POST` | `/api/anomaly/detect` | Detect an anomaly in one record |
 | `POST` | `/api/anomaly/batch` | Detect anomalies in multiple records |
 | `POST` | `/api/model/retrain` | Compatibility endpoint for anomaly retraining |
+
+The frontend does not call these Flask routes directly. It uses Spring's
+authenticated proxy routes: `GET /api/ml/health`, `POST
+/api/ml/anomaly/{detect,batch,train}`, `POST /api/ml/malware/analyze`, and
+`POST /api/ml/sarvam/report`.
 
 ### Sarvam chat
 
@@ -113,21 +161,26 @@ endpoint returns `503` if neither supported API-key environment variable is conf
 
 ### Sarvam-assisted detections and reports
 
-`/api/anomaly/detect`, `/api/anomaly/batch`, and the malware/YARA scan endpoints
-include a `sarvamAnalysis` assessment when Sarvam is configured. A suspicious AI
-assessment can elevate the final verdict, but an AI benign assessment never
-clears an anomaly, malware prediction, or YARA match. The original model result
-is retained in `model_anomaly` or `modelVerdict`. If Sarvam is unavailable or
-returns an invalid assessment, the response is marked `partial` and includes the
-reason; the deterministic result remains available.
+`/api/anomaly/detect` uses the detector only unless `includeSarvam: true` is
+explicitly requested. `/api/anomaly/batch` accepts at most 25 records and
+requests Sarvam analysis for the batch. The frontend's separate Sarvam-review
+action is user-initiated. A suspicious AI assessment can elevate a verdict, but
+a benign assessment never clears a deterministic anomaly, malware prediction,
+or YARA match.
 
-Malware analysis sends derived file metadata and model features to Sarvam, not
-the file bytes or full local path. Set `SARVAM_ANALYSIS_MODEL` to choose another
-model. Sarvam-assisted batch anomaly detection accepts up to 25 records.
-Anomaly records and the `data` submitted for a report are sent to Sarvam; do not
-include information that should not leave your environment.
+The frontend uses authenticated Java routes under `/api/ml/*`; the Java service
+proxies requests to this Python service. Malware advisory analysis sends a
+basename and scan metadata only, never file bytes or the local path. The Sarvam
+report receives the aggregated data selected by the frontend. Review data before
+enabling Sarvam because it is sent to the external Sarvam service. Set
+`SARVAM_ANALYSIS_MODEL` to choose another model.
 
-Generate a downloadable PDF by posting analysis data to `/api/sarvam/report`:
+To train the anomaly detector, post a `records` array to `/api/anomaly/train`.
+The UI's training action uses up to 500 recent packet-metadata records and
+requires at least 20; choose representative benign traffic before training.
+
+Generate a downloadable PDF by posting analysis data to `/api/sarvam/report`
+(or through the authenticated frontend route `/api/ml/sarvam/report`):
 
 ```json
 {

@@ -21,6 +21,7 @@ const Vulnerability = lazy(() => import("./modules/Vulnerability.jsx"));
 const Honeypot = lazy(() => import("./modules/Honeypot.jsx"));
 const Reports = lazy(() => import("./modules/Reports.jsx"));
 const Settings = lazy(() => import("./modules/Settings.jsx"));
+const Users = lazy(() => import("./modules/Users.jsx"));
 
 import Sidebar             from "./components/Sidebar.jsx";
 import Header              from "./components/Header.jsx";
@@ -35,7 +36,6 @@ export default function App() {
   const [page,   setPage]   = useState("dashboard");
   const [toasts, setToasts] = useState([]);
   const [retrying, setRetrying] = useState(false);
-  const [demoUser, setDemoUser] = useState(null);
 
   const { authState, data, actions } = useRealtime();
 
@@ -50,24 +50,12 @@ export default function App() {
 
   // ── Handle login ───────────────────────────────────────────────
   const handleLogin = async (credentials) => {
-    try {
-      setDemoUser({ username: credentials.username, role: "admin" });
-      showToast("Frontend demo login successful. Backend authentication is disabled.", "success");
-    } catch (err) {
-      // Error is already stored in authState.error — Login component reads it
-      throw err;
-    }
+    await actions.login(credentials.username, credentials.password);
+    showToast("Signed in successfully", "success");
   };
 
   // ── Handle logout ──────────────────────────────────────────────
   const handleLogout = async () => {
-    if (demoUser) {
-      setDemoUser(null);
-      setPage("dashboard");
-      showToast("Logged out of frontend demo mode", "info");
-      return;
-    }
-
     await actions.logout().catch(() => {});
     setPage("dashboard");
     showToast("Logged out", "info");
@@ -76,8 +64,7 @@ export default function App() {
   // ── Retry when offline screen is shown ────────────────────────
   const handleRetry = async () => {
     setRetrying(true);
-    // If we have a stale token, try to reconnect WS + sync
-    await actions.syncAll().catch(() => {});
+    await actions.retryBackend().catch(() => {});
     setRetrying(false);
   };
 
@@ -107,11 +94,15 @@ export default function App() {
   // ── Props passed to every page ─────────────────────────────────
   const pageProps = {
     appState:  data,      // pages use appState.* for data
-    currentUser: demoUser || authState.user,
+    currentUser: authState.user,
     onNavigate: setPage,
     onToast:    showToast,
 
     // Network
+    onTrainAnomaly: async () => {
+      return actions.trainAnomalyFromHistory();
+    },
+    onReviewTrafficWithSarvam: async () => actions.reviewTrafficWithSarvam(),
     onAddRule:           async (rule) => { const r = await actions.createRule(rule);     showToast("Rule created", "success");   return r; },
     onDeleteRule:        async (id)   => { await actions.deleteRule(id);                 showToast("Rule deleted", "warning");          },
     onToggleRule:        async (id)   => { const r = await actions.toggleRule(id);       showToast(r.active ? "Rule enabled" : "Rule disabled", "info"); },
@@ -168,6 +159,17 @@ export default function App() {
     onDeployHoneypot: async (d)  => { const r = await actions.deployHoneypot(d); showToast("Honeypot deployed: "+d.name, "success"); return r; },
     onToggleHoneypot: async (id) => { await actions.toggleHoneypot(id);          showToast("Honeypot toggled", "info");                     },
 
+    // Users
+    onAddUser: async (user) => {
+      const created = await actions.createUser(user);
+      showToast(`User "${created.username}" created`, "success");
+      return created;
+    },
+    onToggleUser: async (userId, active) => {
+      const updated = await actions.setUserActive(userId, active);
+      showToast(`User ${updated.username} ${active ? "enabled" : "disabled"}`, "success");
+      return updated;
+    },
   };
 
   // ══════════════════════════════════════════════════════════════
@@ -210,7 +212,7 @@ export default function App() {
 
   // 3. Not authenticated → Login screen
   //    If login fails because backend is down → show OfflineScreen
-  if (!authState.connected && !demoUser) {
+  if (!authState.connected) {
     // Distinguish: never attempted vs failed with backend-down error
     const isBackendDown = authState.error &&
       (authState.error.includes("fetch") ||
@@ -253,6 +255,7 @@ export default function App() {
     honeypot:   <Honeypot     {...pageProps} />,
     reports:    <Reports      {...pageProps} />,
     settings:   <Settings     {...pageProps} />,
+    users:      <Users        {...pageProps} />,
   };
 
   return (
@@ -264,7 +267,14 @@ export default function App() {
           activePage={page}
           onNavigate={setPage}
           badges={badges}
-          status={{ capture: data.captureRunning }}
+          user={authState.user}
+          status={{
+            capture: data.captureRunning,
+            eventReader: !!data.dashStats?.eventReader?.running,
+            mlOnline: authState.mlOnline,
+            sarvamConfigured: !!data.mlStatus?.services?.sarvam?.configured,
+            backendOnline: authState.connected,
+          }}
         />
 
         <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>

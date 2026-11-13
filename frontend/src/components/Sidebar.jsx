@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { id:"vuln",       icon:"🔍", label:"Vulnerability",  badge:null,      badgeColor:null     },
   { id:"honeypot",   icon:"🍯", label:"Honeypots",      badge:null,      badgeColor:null     },
   { id:"reports",    icon:"📊", label:"Reports",        badge:null,      badgeColor:null     },
+  { id:"users",      icon:"👥", label:"Users",          badge:null,      badgeColor:null     },
   { id:"settings",   icon:"⚙️", label:"Settings",       badge:null,      badgeColor:null     },
 ];
 
@@ -21,7 +22,7 @@ const BADGE_COLORS = {
 
 const MODULE_ICON_COLORS = {
   dashboard: "#2563eb", network: "#0f766e", events: "#0891b2", malware: "#16a34a",
-  incidents: "#e11d48", vuln: "#d97706", honeypot: "#9333ea", reports: "#0891b2", settings: "#64748b",
+  incidents: "#e11d48", vuln: "#d97706", honeypot: "#9333ea", reports: "#0891b2", users: "#2563eb", settings: "#64748b",
 };
 
 function ModuleIcon({ id }) {
@@ -35,12 +36,13 @@ function ModuleIcon({ id }) {
     vuln: <><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5M10.5 7.5v6M7.5 10.5h6" /></>,
     honeypot: <><path d="M8 4h8M9 4v4l-3 7a3 3 0 0 0 3 4h6a3 3 0 0 0 3-4l-3-7V4" /><path d="M8 14h8" /></>,
     reports: <><path d="M5 20V10M12 20V4M19 20v-7" /><path d="M3 20h18" /></>,
+    users: <><circle cx="9" cy="8" r="3" /><path d="M3 20v-1a6 6 0 0 1 12 0v1M16 5.5a3 3 0 0 1 0 5.8M18 14a5 5 0 0 1 3 4.5V20" /></>,
     settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.4 1.4-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-2v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L9 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H7v-2h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L8.4 9 9.8 7.6l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6v-.2h2v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.2 9l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v2h-.2a1.7 1.7 0 0 0-1 1Z" /></>,
   };
   return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[id]}</svg>;
 }
 
-export default function Sidebar({ activePage, onNavigate, badges = {}, status = {} }) {
+export default function Sidebar({ activePage, onNavigate, badges = {}, status = {}, user }) {
   const [hovId, setHovId] = useState(null);
 
   return (
@@ -96,7 +98,7 @@ export default function Sidebar({ activePage, onNavigate, badges = {}, status = 
           letterSpacing:"0.1em", textTransform:"uppercase", padding:"8px 8px 4px",
           fontWeight:600 }}>Modules</div>
 
-        {NAV_ITEMS.map(item => {
+        {NAV_ITEMS.filter(item => item.id !== "users" || user?.role === "admin").map(item => {
           const isActive = activePage === item.id;
           const isHov    = hovId === item.id;
           const badgeVal = item.badge ? badges[item.badge] : null;
@@ -147,10 +149,10 @@ export default function Sidebar({ activePage, onNavigate, badges = {}, status = 
         </div>
         {[
           { label:"Capture",  val: status.capture  ? "Active"    : "Inactive",  ok: status.capture  },
-          { label:"Win-Evts", val: "Polling",                                   ok: true            },
-          { label:"ML Svc",   val: "Online",                                    ok: true            },
-          { label:"Sarvam AI",val: "Connected",                                 ok: true            },
-          { label:"Database", val: "Connected",                                 ok: true            },
+          { label:"Win-Evts", val: status.eventReader ? "Running" : "Inactive", ok: !!status.eventReader },
+          { label:"ML Svc",   val: status.mlOnline ? "Online" : "Offline",      ok: !!status.mlOnline },
+          { label:"Sarvam AI",val: status.sarvamConfigured ? "Configured" : "Not configured", ok: !!status.sarvamConfigured },
+          { label:"Database", val: status.backendOnline ? "Connected" : "Offline", ok: !!status.backendOnline },
         ].map(s => (
           <div key={s.label} style={{ display:"flex", justifyContent:"space-between",
             alignItems:"center", marginBottom:5 }}>

@@ -1,15 +1,9 @@
 import { useState } from "react";
 import { Btn, FormGroup } from "../components/UI.jsx";
-import { API_BASE, ML_BASE } from "../api/client.js";
-
-export const DEFAULT_LOGIN_CREDENTIALS = Object.freeze({
-  username: "admin",
-  password: "password",
-});
 
 export default function Login({ onLogin, error: externalError }) {
-  const [username, setUsername] = useState(DEFAULT_LOGIN_CREDENTIALS.username);
-  const [password, setPassword] = useState(DEFAULT_LOGIN_CREDENTIALS.password);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [localError, setLocalError] = useState("");
   const [loading,    setLoading]    = useState(false);
 
@@ -17,17 +11,14 @@ export default function Login({ onLogin, error: externalError }) {
 
   const handle = async () => {
     setLocalError("");
-    if (
-      username !== DEFAULT_LOGIN_CREDENTIALS.username ||
-      password !== DEFAULT_LOGIN_CREDENTIALS.password
-    ) {
-      setLocalError("Use the default frontend credentials shown below.");
+    if (!username.trim() || !password) {
+      setLocalError("Enter your username and password.");
       return;
     }
 
     setLoading(true);
     try {
-      await onLogin({ username, role: "admin", frontendOnly: true });
+      await onLogin({ username: username.trim(), password });
     } catch (e) {
       setLocalError(e.message || "Login failed. Check your credentials.");
       setLoading(false);
@@ -164,7 +155,7 @@ export default function Login({ onLogin, error: externalError }) {
             <input
               value={username} onChange={e => setUsername(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handle()}
-              placeholder="admin" autoFocus
+              placeholder="username" autoFocus
             />
           </FormGroup>
 
@@ -190,18 +181,9 @@ export default function Login({ onLogin, error: externalError }) {
           <div style={{
             marginTop: 20, padding: "12px 14px", background: "#f8fafc",
             borderRadius: "var(--r-md)", border: "1.5px solid #e8ecf2",
+            fontSize: 11, color: "#64748b", lineHeight: 1.5,
           }}>
-            <div style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#64748b", marginBottom: 4 }}>
-              DEFAULT CREDENTIALS
-            </div>
-            <div style={{ fontSize: 12, color: "#475569" }}>
-                <strong>admin</strong> / password
-            </div>
-            <div style={{ fontSize: 10, color: "#64748b", marginTop: 8, lineHeight: 1.5 }}>
-              Frontend: http://localhost:5173<br />
-              Backend API: {API_BASE}<br />
-              ML Service: {ML_BASE}
-            </div>
+            Sign in with an account configured in the KavachOps backend.
           </div>
 
           <div style={{

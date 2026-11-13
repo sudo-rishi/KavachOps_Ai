@@ -2,6 +2,7 @@ package com.kavachopsai.integration.zap;
 
 import java.net.URI;
 import java.net.URLEncoder;
+import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -58,11 +59,28 @@ public class OwaspZapClient {
         if (!enabled) {
             throw new IllegalStateException("OWASP ZAP integration is disabled");
         }
+        validateTargetUrl(targetUrl);
         String encodedTarget = URLEncoder.encode(targetUrl, StandardCharsets.UTF_8);
         String scanId = startScan(encodedTarget);
         waitForCompletion(scanId);
         List<ZapAlert> alerts = fetchAlerts(encodedTarget);
         return new ZapScanResult(scanId, targetUrl, alerts);
+    }
+
+    private void validateTargetUrl(String targetUrl) {
+        if (targetUrl == null || targetUrl.isBlank()) {
+            throw new IllegalArgumentException("OWASP ZAP target URL is required");
+        }
+        try {
+            URI target = new URI(targetUrl.trim());
+            String scheme = target.getScheme();
+            if (target.getHost() == null || target.getUserInfo() != null
+                    || !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
+                throw new IllegalArgumentException("OWASP ZAP target must be an HTTP(S) URL with a host");
+            }
+        } catch (URISyntaxException ex) {
+            throw new IllegalArgumentException("OWASP ZAP target URL is invalid", ex);
+        }
     }
 
     private String startScan(String encodedTarget) throws Exception {

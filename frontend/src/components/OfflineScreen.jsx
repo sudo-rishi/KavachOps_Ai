@@ -1,22 +1,16 @@
 import { useState, useEffect } from "react";
-import { checkHealth, checkMlHealth, API_BASE, ML_BASE } from "../api/client.js";
+import { checkHealth, API_BASE } from "../api/client.js";
 
 export function OfflineScreen({ error, onRetry, retrying }) {
   const [backendStatus, setBackendStatus] = useState("checking");
-  const [mlStatus,      setMlStatus]      = useState("checking");
 
   useEffect(() => {
     const probe = async () => {
       setBackendStatus("checking");
-      setMlStatus("checking");
 
       checkHealth()
         .then(()  => setBackendStatus("online"))
         .catch(() => setBackendStatus("offline"));
-
-      checkMlHealth()
-        .then(()  => setMlStatus("online"))
-        .catch(() => setMlStatus("offline"));
     };
 
     probe();
@@ -95,7 +89,7 @@ export function OfflineScreen({ error, onRetry, retrying }) {
 
           {[
             { label:"Backend API",  hint:API_BASE + "/actuator/health", status:backendStatus, required:true  },
-            { label:"ML Service",   hint:ML_BASE  + "/api/health",      status:mlStatus,      required:false },
+            { label:"ML Service",   hint:API_BASE + "/ml/health (requires sign-in)", status:"offline", required:false },
           ].map(svc => (
             <div key={svc.label} style={{
               display:"flex", alignItems:"center", justifyContent:"space-between",

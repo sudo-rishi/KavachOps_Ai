@@ -2,7 +2,9 @@ package com.kavachopsai.service;
 
 import java.time.ZonedDateTime;
 import java.util.Map;
+import java.util.Locale;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.security.authentication.AuthenticationManager;
@@ -38,6 +40,8 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
 
     private static final String DEFAULT_ROLE = "analyst";
+    private static final Set<String> ASSIGNABLE_ROLES =
+            Set.of("admin", "analyst", "operator", "auditor", "viewer");
 
     @Transactional
     public Map<String, Object> login(String username, String password, String ipAddress, String userAgent) {
@@ -74,7 +78,7 @@ public class AuthService {
             "accessToken",  accessToken,
             "refreshToken", refreshToken,
             "tokenType",    "Bearer",
-            "expiresIn",    86400,
+            "expiresIn",    jwtService.getAccessTokenExpirationSeconds(),
             "user", Map.of(
                 "userId",   user.getUserId(),
                 "username", user.getUsername(),
@@ -86,6 +90,19 @@ public class AuthService {
 
     @Transactional
     public User register(String username, String email, String password) {
+        return createUser(username, email, password, DEFAULT_ROLE);
+    }
+
+    @Transactional
+    public User createManagedUser(String username, String email, String password, String role) {
+        String normalizedRole = role == null ? "" : role.trim().toLowerCase(Locale.ROOT);
+        if (!ASSIGNABLE_ROLES.contains(normalizedRole)) {
+            throw new IllegalArgumentException("Unsupported user role");
+        }
+        return createUser(username, email, password, normalizedRole);
+    }
+
+    private User createUser(String username, String email, String password, String role) {
         if (userRepo.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already taken: " + username);
         }
@@ -99,14 +116,21 @@ public class AuthService {
                 .email(email)
                 .passwordHash(passwordEncoder.encode(password))
                 .salt(salt.substring(0, 29))
-                // self-service signups are always lowest-privilege
-                .role(DEFAULT_ROLE)
+                .role(role)
                 .active(true)
                 .build();
 
         User saved = userRepo.save(user);
-        log.info("New user registered: {} (role: {})", username, DEFAULT_ROLE);
+        log.info("New user registered: {} (role: {})", username, role);
         return saved;
+    }
+
+    @Transactional
+    public User setUserActive(Long userId, boolean active) {
+        User user = userRepo.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
+        user.setActive(active);
+        return userRepo.save(user);
     }
 
     @Transactional

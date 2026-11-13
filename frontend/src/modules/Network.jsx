@@ -72,12 +72,16 @@ const PRESET_IDS_RULES = [
   },
 ];
 
-export default function Network({ appState, onAddRule, onDeleteRule, onToggleRule, onUpdateAlertStatus, onToast }) {
+export default function Network({ appState, currentUser, onAddRule, onDeleteRule, onToggleRule, onUpdateAlertStatus, onTrainAnomaly, onReviewTrafficWithSarvam, onToast }) {
   const { alerts, idsRules, capturePackets, captureRunning, trafficFeed } = appState;
   const [selectedPacketIdx, setSelectedPacketIdx] = useState(0);
   const [presetBusy, setPresetBusy] = useState(null);
   const [ruleBusy, setRuleBusy] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(null);
+  const [training, setTraining] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [sarvamReview, setSarvamReview] = useState(null);
+  const anomalyStatus = appState.mlStatus?.services?.anomaly;
   const packetRows = (trafficFeed || []).slice(0, 80).map((p, idx) => ({
     no: idx + 1,
     time: p.time || "--:--:--",
@@ -130,6 +134,34 @@ export default function Network({ appState, onAddRule, onDeleteRule, onToggleRul
     }
   };
 
+  const handleTrainAnomaly = async () => {
+    if (training) return;
+    setTraining(true);
+    try {
+      const result = await onTrainAnomaly();
+      onToast?.(`Anomaly baseline trained · ${result.baselineRows || 0} records`, "success");
+    } catch (err) {
+      onToast?.(`Anomaly training failed: ${err.message || "unknown error"}`, "error");
+    } finally {
+      setTraining(false);
+    }
+  };
+
+  const handleSarvamReview = async () => {
+    if (reviewing) return;
+    setReviewing(true);
+    try {
+      const result = await onReviewTrafficWithSarvam();
+      setSarvamReview(result);
+      const reviewed = result.results?.filter(item => item.sarvamAnalysis?.status === "ok").length || 0;
+      onToast?.(`Sarvam reviewed ${reviewed} of ${result.count || 0} traffic records`, result.status === "ok" ? "success" : "warning");
+    } catch (err) {
+      onToast?.(`Sarvam review failed: ${err.message || "unknown error"}`, "error");
+    } finally {
+      setReviewing(false);
+    }
+  };
+
   return (
     <div className="page-enter">
       {/* Stats */}
@@ -140,6 +172,33 @@ export default function Network({ appState, onAddRule, onDeleteRule, onToggleRul
         <StatCard icon="⚡" label="Critical/High"  value={(alerts.filter(a => a.severity === "CRITICAL").length) + (alerts.filter(a => a.severity === "HIGH").length)} sub="Needs attention" color="#f59e0b" />
         <StatCard icon="📋" label="Active Rules"   value={idsRules.filter(r => r.active).length}    sub={`of ${idsRules.length} total`} color="#10b981" />
       </Grid>
+
+      <Panel
+        title="ML Anomaly Baseline"
+        subtitle={anomalyStatus?.ready ? "Detector ready" : "Detector requires a representative baseline"}
+        style={{ marginBottom:20 }}
+        actions={<>
+          <Btn size="sm" variant="outline" onClick={handleSarvamReview}
+            disabled={reviewing || !anomalyStatus?.ready || !["admin", "analyst", "operator"].includes(currentUser?.role)}>
+            {reviewing ? "Reviewing…" : "Sarvam review (latest 25)"}
+          </Btn>
+          <Btn size="sm" variant="primary" onClick={handleTrainAnomaly}
+            disabled={training || !["admin", "analyst"].includes(currentUser?.role)}>
+            {training ? "Training…" : "Train from stored traffic"}
+          </Btn>
+        </>}
+      >
+        <div style={{ padding:"12px 18px", color:"var(--color-text-secondary)", fontSize:12, lineHeight:1.55 }}>
+          Training uses up to 500 recent stored packet-metadata records (protocol, ports, and size).
+          Choose a representative benign period before training; this does not establish that the data is safe.
+          Only protocol, port numbers, and packet size are sent to the detector. A manual Sarvam review sends the same metadata for up to 25 records.
+          {anomalyStatus && <span> Current model status: {anomalyStatus.ready ? "ready" : "not trained"}.</span>}
+          {appState.mlError && <div style={{ marginTop:6, color:"#be123c" }}>ML error: {appState.mlError}</div>}
+          {sarvamReview && <div role="status" style={{ marginTop:6 }}>
+            Last Sarvam review: {sarvamReview.status} · {sarvamReview.alerts || 0} anomaly findings from {sarvamReview.count || 0} records.
+          </div>}
+        </div>
+      </Panel>
 
       {/* Capture Status Bar */}
       <div style={{
