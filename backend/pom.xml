@@ -18,7 +18,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <start-class>com.kavachopsai.KavachOpsAi</start-class>
-        <java.version>21</java.version>
+        <java.version>25</java.version>
         <!-- Dependency Versions -->
         <pcap4j.version>1.8.2</pcap4j.version>
         <hibernate.version>7.3.0.Final</hibernate.version>
