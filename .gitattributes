@@ -1,1 +1,2 @@
 dataset/cve_data.csv filter=lfs diff=lfs merge=lfs -text
+dataset/cve_corpus.csv filter=lfs diff=lfs merge=lfs -text
