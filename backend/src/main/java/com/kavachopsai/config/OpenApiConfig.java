@@ -44,7 +44,7 @@ public class OpenApiConfig {
                     .name("Rishikesh Kumar")
                     .email("admin@kavachopsai.local"))
                 .license(new License()
-                    .name("IGNOU BCA BCSP-064")))
+                    .name("Apache 2.0")))
             .servers(List.of(
                 new Server().url("http://localhost:8081/api").description("Local Development")))
             .addSecurityItem(new SecurityRequirement().addList("bearerAuth"))
