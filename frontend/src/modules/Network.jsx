@@ -402,7 +402,7 @@ export default function Network({ appState, currentUser, onAddRule, onDeleteRule
                           size="xs"
                           variant={rule.active ? "ghost" : "success"}
                           onClick={() => handleRuleToggle(rule.ruleId)}
-                          disabled={ruleBusy === rule.ruleId}
+                          disabled={rule._demo || ruleBusy === rule.ruleId}
                         >
                           {ruleBusy === rule.ruleId ? "Saving..." : rule.active ? "Deactivate" : "Activate"}
                         </Btn>
@@ -410,7 +410,7 @@ export default function Network({ appState, currentUser, onAddRule, onDeleteRule
                           size="xs"
                           variant="danger"
                           onClick={() => handleRuleDelete(rule.ruleId)}
-                          disabled={deleteBusy === rule.ruleId}
+                          disabled={rule._demo || deleteBusy === rule.ruleId}
                         >
                           {deleteBusy === rule.ruleId ? "Removing..." : "Delete"}
                         </Btn>

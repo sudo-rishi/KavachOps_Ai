@@ -132,7 +132,7 @@ export default function Honeypot({ appState, onDeployHoneypot, onToggleHoneypot,
                   <Btn size="xs" variant={hp.active ? "ghost" : "success"} onClick={() => {
                     onToggleHoneypot(hp.honeypotId);
                     onToast(hp.honeypotName + (hp.active ? " deactivated" : " activated"), hp.active ? "warning" : "success");
-                  }}>{hp.active ? "Disable" : "Enable"}</Btn>
+                  }} disabled={hp._demo}>{hp.active ? "Disable" : "Enable"}</Btn>
                 </div>
               </div>
             ))

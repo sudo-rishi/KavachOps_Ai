@@ -4,7 +4,7 @@
 //  • Receives WebSocket pushes for real-time updates
 //  • Auto-starts packet capture after login
 //  • Enriches alerts with ML anomaly scores
-//  • No simulation fallback — errors surface to the UI
+//  • Empty modules show clearly marked, frontend-only demo examples
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -24,6 +24,7 @@ import {
 } from "../api/client.js";
 import { ws, TOPICS } from "../services/websocket.js";
 import { fmtTime } from "../utils/dateFormatter.js";
+import { createDemoData } from "../data/seed.js";
 
 const SYNC_MS   = 15_000;   // REST sync interval
 const HEALTH_MS = 10_000;   // health check interval
@@ -72,6 +73,7 @@ export function useRealtime() {
     honeypotStats:  null,
     mlStatus:       null,
     mlError:        null,
+    demoDataModules: [],
   });
 
   const syncTimerRef   = useRef(null);
@@ -263,7 +265,7 @@ export function useRealtime() {
     try {
       const [
         alertsRes, incRes, eventsRes, malwareRes,
-        rulesRes, vulnRes, hpRes, dashRes,
+        rulesRes, vulnRes, vulnScansRes, hpRes, dashRes,
         hpAttackersRes, hpStatsRes, usersRes,
       ] = await Promise.allSettled([
         networkApi.getAlerts("", 0, 100),
@@ -272,6 +274,7 @@ export function useRealtime() {
         malwareApi.getScans("", 0, 50),
         networkApi.getRules(),
         vulnApi.getFindings("", "", 0, 100),
+        vulnApi.getScans(0, 50),
         hpApi.getAll(),
         dashApi.stats(),
         hpApi.getAttackers(50),
@@ -279,36 +282,88 @@ export function useRealtime() {
         usersApi.getAll(),
       ]);
 
-      const extract = (r, fallback = []) =>
-        r.status === "fulfilled"
-          ? (r.value?.content ?? r.value ?? fallback)
-          : fallback;
-
+      const demoData = createDemoData();
       setData(p => {
-        const mergedAlerts = extract(alertsRes, p.alerts);
-        const seededFeed = (p.feedItems && p.feedItems.length > 0)
-          ? p.feedItems
-          : mergedAlerts.slice(0, 20).map(a => ({
+        const selectRows = (result, previous, sampleRows) => {
+          const previousRows = Array.isArray(previous) ? previous : [];
+          if (result.status !== "fulfilled") {
+            return {
+              rows: previousRows,
+              seeded: previousRows.some(row => row?._demo === true),
+            };
+          }
+
+          const responseRows = result.value?.content ?? result.value ?? [];
+          const liveRows = Array.isArray(responseRows)
+            ? responseRows.filter(row => row?._demo !== true)
+            : [];
+          if (liveRows.length > 0) return { rows: liveRows, seeded: false };
+
+          const retainedLiveRows = previousRows.filter(row => row?._demo !== true);
+          return {
+            rows: [...retainedLiveRows, ...sampleRows],
+            seeded: sampleRows.length > 0,
+          };
+        };
+
+        const alerts = selectRows(alertsRes, p.alerts, demoData.alerts);
+        const incidents = selectRows(incRes, p.incidents, demoData.incidents);
+        const winEvents = selectRows(eventsRes, p.winEvents, demoData.winEvents);
+        const malwareScans = selectRows(malwareRes, p.malwareScans, demoData.malwareScans);
+        const idsRules = selectRows(rulesRes, p.idsRules, demoData.idsRules);
+        const vulnFindings = selectRows(vulnRes, p.vulnFindings, demoData.vulnFindings);
+        const vulnScans = selectRows(vulnScansRes, p.vulnScans, demoData.vulnScans);
+        const honeypots = selectRows(hpRes, p.honeypots, demoData.honeypots);
+        const attackers = selectRows(hpAttackersRes, p.attackers, demoData.attackers);
+        const users = selectRows(usersRes, p.users, demoData.users);
+        const liveTraffic = (p.trafficFeed || []).filter(row => row?._demo !== true);
+        const trafficFeed = liveTraffic.length > 0 ? liveTraffic : demoData.trafficFeed;
+        const liveFeedItems = (p.feedItems || []).filter(item => item?._demo !== true);
+        const feedItems = liveFeedItems.length > 0
+          ? liveFeedItems
+          : alerts.rows.slice(0, 20).map(a => ({
               time: fmtTime(a.timestamp || Date.now()),
               severity: normalizeFeedSeverity(a.severity),
               label: a.alertType || "ALERT",
               message: a.alertMessage || a.message || "Alert event",
+              ...(a._demo ? { _demo: true } : {}),
             }));
+
+        const demoDataModules = [];
+        if (alerts.seeded || idsRules.seeded || trafficFeed.some(row => row._demo)) demoDataModules.push("network");
+        if (winEvents.seeded) demoDataModules.push("windows events");
+        if (malwareScans.seeded) demoDataModules.push("malware");
+        if (incidents.seeded) demoDataModules.push("incidents");
+        if (vulnFindings.seeded || vulnScans.seeded) demoDataModules.push("vulnerability");
+        if (honeypots.seeded || attackers.seeded) demoDataModules.push("honeypots");
+        if (users.seeded) demoDataModules.push("users");
+
+        const reportedHoneypotStats = hpStatsRes.status === "fulfilled" ? hpStatsRes.value : p.honeypotStats;
+        const honeypotStats = honeypots.seeded || attackers.seeded
+          ? {
+              activeHoneypots: honeypots.rows.filter(h => h.active).length,
+              interactions24h: honeypots.rows.reduce((total, h) => total + (h.interactions || 0), 0),
+              uniqueAttackers24h: attackers.rows.length,
+            }
+          : reportedHoneypotStats;
 
         return {
           ...p,
-          alerts:       mergedAlerts,
-          incidents:    extract(incRes,     p.incidents),
-          winEvents:    extract(eventsRes,  p.winEvents),
-          malwareScans: extract(malwareRes, p.malwareScans),
-          idsRules:     extract(rulesRes,   p.idsRules),
-          vulnFindings: extract(vulnRes,    p.vulnFindings),
-          honeypots:    extract(hpRes,      p.honeypots),
+          alerts:       alerts.rows,
+          incidents:    incidents.rows,
+          winEvents:    winEvents.rows,
+          malwareScans: malwareScans.rows,
+          idsRules:     idsRules.rows,
+          vulnFindings: vulnFindings.rows,
+          vulnScans:    vulnScans.rows,
+          honeypots:    honeypots.rows,
           dashStats:    dashRes.status === "fulfilled" ? dashRes.value : p.dashStats,
-          attackers:    extract(hpAttackersRes, p.attackers),
-          users:        extract(usersRes, p.users),
-          honeypotStats: hpStatsRes.status === "fulfilled" ? hpStatsRes.value : p.honeypotStats,
-          feedItems: seededFeed.slice(0, FEED_MAX),
+          attackers:    attackers.rows,
+          users:        users.rows,
+          honeypotStats,
+          trafficFeed: trafficFeed.slice(0, 100),
+          feedItems: feedItems.slice(0, FEED_MAX),
+          demoDataModules,
         };
       });
     } catch (e) {
@@ -367,6 +422,7 @@ export function useRealtime() {
 
         // Check ML service
         const mlStatus = await mlApi.health().catch(() => null);
+        setData(p => ({ ...p, mlStatus }));
 
         patchAuth({
           loading:   false,

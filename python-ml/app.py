@@ -5,9 +5,12 @@ import io
 import json
 import os
 import re
+from functools import lru_cache
+from hashlib import sha256
 from math import isfinite, log2
 from pathlib import Path
 from threading import RLock
+from time import monotonic
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request as URLRequest
@@ -29,13 +32,98 @@ ANOMALY_DIR = ROOT_DIR / "Anomly Detection Model"
 YARA_DIR = ROOT_DIR / "Yara Detection Model"
 DEFAULT_YARA_RULES_DIR = YARA_DIR / "Rules"
 SARVAM_CHAT_URL = "https://api.sarvam.ai/v1/chat/completions"
+SARVAM_MODELS_URL = "https://api.sarvam.ai/v2/models"
+SARVAM_HEALTH_CACHE_SECONDS = 30.0
+
+_sarvam_health_lock = RLock()
+_sarvam_health_cache: tuple[bytes, float, dict[str, Any]] | None = None
+
+
+@lru_cache(maxsize=1)
+def _read_sarvam_key_from_project_env() -> str:
+    env_file = ROOT_DIR.parent / ".env"
+    if not env_file.is_file():
+        return ""
+
+    values: dict[str, str] = {}
+    supported_names = {"SARVAM_API_KEY", "KAVACHOPSAI_SARVAM_API_KEY"}
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        entry = line.strip()
+        if not entry or entry.startswith("#"):
+            continue
+        if entry.startswith("export "):
+            entry = entry[len("export "):].strip()
+
+        name, separator, value = entry.partition("=")
+        if not separator:
+            continue
+
+        normalized_name = name.strip().replace(".", "_").replace("-", "_").upper()
+        if normalized_name not in supported_names:
+            continue
+
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        reference = re.fullmatch(
+            r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::([^}]*))?\}",
+            value,
+        )
+        if reference:
+            value = os.getenv(reference.group(1), reference.group(2) or "").strip()
+        values[normalized_name] = value
+
+    return values.get("SARVAM_API_KEY") or values.get("KAVACHOPSAI_SARVAM_API_KEY", "")
 
 
 def _get_sarvam_api_key() -> str:
     return (
         os.getenv("SARVAM_API_KEY", "").strip()
         or os.getenv("KAVACHOPSAI_SARVAM_API_KEY", "").strip()
+        or _read_sarvam_key_from_project_env()
     )
+
+
+def _get_sarvam_connection_status(api_key: str) -> dict[str, Any]:
+    global _sarvam_health_cache
+
+    if not api_key:
+        return {"connected": False, "error": None}
+
+    key_fingerprint = sha256(api_key.encode("utf-8")).digest()
+    now = monotonic()
+    with _sarvam_health_lock:
+        if (
+            _sarvam_health_cache is not None
+            and _sarvam_health_cache[0] == key_fingerprint
+            and now - _sarvam_health_cache[1] < SARVAM_HEALTH_CACHE_SECONDS
+        ):
+            return dict(_sarvam_health_cache[2])
+
+        request = URLRequest(
+            SARVAM_MODELS_URL,
+            headers={"api-subscription-key": api_key},
+        )
+        try:
+            with urlopen(request, timeout=3) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+                raise ValueError("Invalid models response")
+            status = {"connected": True, "error": None}
+        except HTTPError as ex:
+            status = {
+                "connected": False,
+                "error": f"Sarvam API returned HTTP {ex.code}",
+            }
+        except (URLError, TimeoutError, OSError):
+            status = {"connected": False, "error": "Unable to reach Sarvam API"}
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            status = {"connected": False, "error": "Sarvam API returned an invalid response"}
+
+        if not status["connected"]:
+            app.logger.warning("Sarvam connectivity check failed: %s", status["error"])
+        _sarvam_health_cache = (key_fingerprint, monotonic(), status)
+        return dict(status)
 
 
 def _load_module(module_name: str, module_path: Path):
@@ -757,12 +845,15 @@ def index():
 @app.route("/api/health", methods=["GET"])
 def health():
     anomaly_state = _anomaly_service.state() if _anomaly_service else {"ready": False}
+    sarvam_api_key = _get_sarvam_api_key()
+    sarvam_connection = _get_sarvam_connection_status(sarvam_api_key)
     return jsonify(
         {
             "status": "ok",
             "services": {
                 "sarvam": {
-                    "configured": bool(_get_sarvam_api_key()),
+                    "configured": bool(sarvam_api_key),
+                    **sarvam_connection,
                     "analysisModel": os.getenv("SARVAM_ANALYSIS_MODEL", "glm5.3"),
                 },
                 "malware": {"ready": _malware_err is None, "error": _malware_err},

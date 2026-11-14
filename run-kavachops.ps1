@@ -304,5 +304,5 @@ if ($sarvamKey) {
 Write-Host "KavachOps is running: http://localhost:5173"
 Write-Host "Python ML: $mlUri"
 Write-Host "Spring API: $backendUri"
-Write-Host "Sarvam key: $sarvamStatus (no Sarvam request was sent)"
+Write-Host "Sarvam key: $sarvamStatus; connectivity is checked by the ML health endpoint."
 Write-Host "Console process IDs: ML=$($pythonProcess.Id), API=$($backendProcess.Id), frontend=$($frontendProcess.Id)"

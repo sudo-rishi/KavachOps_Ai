@@ -119,7 +119,7 @@ export default function Incidents({ appState, onCreateIncident, onUpdateIncident
                   const next = STATUSES[STATUSES.indexOf(r.status)+1] || "closed";
                   onUpdateIncident(r.incidentId, next);
                   onToast(`Incident ${r.incidentNumber} → ${next}`, "success");
-                }}>Update</Btn>
+                }} disabled={r._demo}>Update</Btn>
               </div>
             )},
           ]}
@@ -139,7 +139,7 @@ export default function Incidents({ appState, onCreateIncident, onUpdateIncident
               onUpdateIncident(viewIncident.incidentId, next);
               setViewIncident(p => p ? { ...p, status:next } : p);
               onToast(`Status → ${next}`, "success");
-            }}>Advance Status →</Btn>
+            }} disabled={viewIncident._demo}>Advance Status →</Btn>
           )}
         </>}>
         {viewIncident && (
@@ -173,7 +173,8 @@ export default function Incidents({ appState, onCreateIncident, onUpdateIncident
             <Timeline incident={viewIncident} timeline={incidentTimeline} />
             <div style={{ marginTop:14, borderTop:"1.5px solid var(--color-border)", paddingTop:14 }}>
               <FormGroup label="Add Note">
-                <textarea value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Investigation notes, findings, actions taken…" />
+                <textarea value={noteText} onChange={e => setNoteText(e.target.value)}
+                  placeholder="Investigation notes, findings, actions taken…" disabled={viewIncident._demo} />
               </FormGroup>
               <Btn size="sm" variant="outline" onClick={async () => {
                 if (!noteText.trim()) return;
@@ -186,7 +187,7 @@ export default function Incidents({ appState, onCreateIncident, onUpdateIncident
                 } catch (err) {
                   onToast(err?.message || "Failed to add note", "error");
                 }
-              }}>Add Note</Btn>
+              }} disabled={viewIncident._demo}>Add Note</Btn>
             </div>
           </div>
         )}

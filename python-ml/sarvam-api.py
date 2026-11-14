@@ -4,16 +4,33 @@ from pathlib import Path
 from sarvamai import SarvamAI
 
 
+def _get_sarvam_api_key() -> str:
+    api_key = (
+        os.environ.get("SARVAM_API_KEY", "").strip()
+        or os.environ.get("KAVACHOPSAI_SARVAM_API_KEY", "").strip()
+    )
+    if api_key:
+        return api_key
+
+    env_file = Path(__file__).resolve().parents[1] / ".env"
+    if env_file.is_file():
+        values: dict[str, str] = {}
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            name, separator, value = line.partition("=")
+            normalized_name = name.strip().replace(".", "_").replace("-", "_").upper()
+            if separator and normalized_name in {
+                "SARVAM_API_KEY",
+                "KAVACHOPSAI_SARVAM_API_KEY",
+            }:
+                values[normalized_name] = value.strip().strip("\"'")
+        return values.get("SARVAM_API_KEY") or values.get(
+            "KAVACHOPSAI_SARVAM_API_KEY", ""
+        )
+    return ""
+
+
 def main() -> None:
-    api_key = os.environ.get("SARVAM_API_KEY", "").strip()
-    if not api_key:
-        env_file = Path(__file__).resolve().parents[1] / ".env"
-        if env_file.is_file():
-            for line in env_file.read_text(encoding="utf-8").splitlines():
-                name, separator, value = line.partition("=")
-                if separator and name.strip() == "SARVAM_API_KEY":
-                    api_key = value.strip().strip("\"'")
-                    break
+    api_key = _get_sarvam_api_key()
     if not api_key:
         raise SystemExit("Set SARVAM_API_KEY in the environment or project .env file")
 

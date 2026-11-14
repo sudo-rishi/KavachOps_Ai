@@ -155,6 +155,7 @@ export default function Users({ appState, onAddUser, onToggleUser, onToast }) {
                 <Btn size="xs" variant="ghost" onClick={() => setViewUser(r)}>View</Btn>
                 <Btn size="xs" variant={r.active ? "ghost" : "success"}
                   onClick={() => onToggleUser(r.userId, !r.active).catch(err => onToast(`Unable to update user: ${err.message}`, "error"))}
+                  disabled={r._demo}
                   style={r.active ? { color:"#e11d48", borderColor:"#fecdd3" } : {}}>
                   {r.active ? "Disable" : "Enable"}
                 </Btn>

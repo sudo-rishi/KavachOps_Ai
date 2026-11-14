@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
 //  KavachOps AI Root App
-//  Real connections only — no simulation fallback.
+//  Real connections with clearly marked frontend-only demo data for empty modules.
 //  • Login → JWT → WebSocket → auto-start capture
 //  • Offline backend → OfflineScreen (hard block)
 //  • ML anomaly scores on every captured packet
@@ -272,7 +272,9 @@ export default function App() {
             capture: data.captureRunning,
             eventReader: !!data.dashStats?.eventReader?.running,
             mlOnline: authState.mlOnline,
-            sarvamConfigured: !!data.mlStatus?.services?.sarvam?.configured,
+            sarvamConfigured: data.mlStatus?.services?.sarvam?.configured,
+            sarvamConnected: data.mlStatus?.services?.sarvam?.connected,
+            sarvamError: data.mlStatus?.services?.sarvam?.error,
             backendOnline: authState.connected,
           }}
         />

@@ -28,7 +28,10 @@ python -m pip install -r requirements.txt
 
 For the standalone chat example, add `SARVAM_API_KEY=` to the project-root
 `.env` file and paste the key there. `.env` is ignored by Git. The service itself
-reads the key from its process environment:
+reads the key from its process environment. The unified Flask service also reads
+`SARVAM_API_KEY`, `KAVACHOPSAI_SARVAM_API_KEY`, or
+`kavachopsai.sarvam.api-key` from that root `.env` file when no process variable
+is set; process variables take precedence:
 
 ```powershell
 $env:SARVAM_API_KEY = "your-sarvam-api-key"
@@ -39,6 +42,11 @@ For Spring-style deployment environments, `KAVACHOPSAI_SARVAM_API_KEY` is also
 accepted. It corresponds to the property name
 `kavachopsai.sarvam.api-key`; set it as an environment variable for the Python
 process rather than adding the secret to source-controlled configuration.
+
+The `/api/health` endpoint checks Sarvam connectivity with a read-only
+`GET /v2/models` request and caches the result for 30 seconds. It reports
+`configured` separately from `connected`, so the frontend can distinguish a
+saved key from a reachable Sarvam API.
 
 ## Spring and frontend integration
 
@@ -71,8 +79,10 @@ Run the standalone Sarvam example from this directory with:
 py -3.12 sarvam-api.py
 ```
 
-It reads `SARVAM_API_KEY` from the process environment or project-root `.env`
-and sends one chat completion request using `glm5.3`.
+It reads `SARVAM_API_KEY` from the process environment first, then the
+project-root `.env`. As a fallback, it accepts `KAVACHOPSAI_SARVAM_API_KEY`,
+including the dotted `kavachopsai.sarvam.api-key` property. It does not use the
+VirusTotal setting. The script sends one chat completion request using `glm5.3`.
 
 The server reads `ML_APP_HOST` (default `127.0.0.1`) and `ML_APP_PORT` (default
 `5000`). If the services run in separate containers, bind Flask to a private

@@ -44,6 +44,13 @@ function ModuleIcon({ id }) {
 
 export default function Sidebar({ activePage, onNavigate, badges = {}, status = {}, user }) {
   const [hovId, setHovId] = useState(null);
+  const sarvamStatus = status.sarvamConfigured !== true
+    ? status.sarvamConfigured === false ? "Not configured" : "Checking"
+    : status.sarvamConnected === true
+      ? "Configured & Connected"
+      : status.sarvamConnected === false
+        ? "Configured, disconnected"
+        : "Checking connection";
 
   return (
     <aside style={{
@@ -151,10 +158,10 @@ export default function Sidebar({ activePage, onNavigate, badges = {}, status = 
           { label:"Capture",  val: status.capture  ? "Active"    : "Inactive",  ok: status.capture  },
           { label:"Win-Evts", val: status.eventReader ? "Running" : "Inactive", ok: !!status.eventReader },
           { label:"ML Svc",   val: status.mlOnline ? "Online" : "Offline",      ok: !!status.mlOnline },
-          { label:"Sarvam AI",val: status.sarvamConfigured ? "Configured" : "Not configured", ok: !!status.sarvamConfigured },
+          { label:"Sarvam AI",val: sarvamStatus, ok: status.sarvamConfigured === true && status.sarvamConnected === true, title: status.sarvamError || undefined },
           { label:"Database", val: status.backendOnline ? "Connected" : "Offline", ok: !!status.backendOnline },
         ].map(s => (
-          <div key={s.label} style={{ display:"flex", justifyContent:"space-between",
+          <div key={s.label} title={s.title} style={{ display:"flex", justifyContent:"space-between",
             alignItems:"center", marginBottom:5 }}>
             <span style={{ fontFamily:"var(--font-mono)", fontSize:10,
               color:"var(--color-text-tertiary)" }}>{s.label}</span>
