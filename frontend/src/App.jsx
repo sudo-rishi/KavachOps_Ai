@@ -187,12 +187,11 @@ export default function App() {
           flexDirection:"column", gap:16,
         }}>
           <div style={{
-            width:64, height:64, borderRadius:18,
-            background:"linear-gradient(135deg, #1f5fd9, #1a8797)",
-            display:"flex", alignItems:"center", justifyContent:"center", fontSize:22,
-            color:"#ffffff", fontWeight:800, fontFamily:"var(--font-display)",
-            boxShadow:"0 10px 26px rgba(31,95,217,0.28)",
-          }}>SG</div>
+            width:64, height:64, borderRadius:18, overflow:"hidden",
+            background:"#ffffff", boxShadow:"0 10px 26px rgba(31,95,217,0.28)",
+          }}>
+            <img src="/kavachops-logo.png" alt="" style={{ width:"100%", height:"100%", objectFit:"contain" }} />
+          </div>
           <div style={{ fontFamily:"var(--font-display)", fontSize:18, fontWeight:800,
             color:"#0f172a", letterSpacing:"-.04em" }}>KavachOps AI</div>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>

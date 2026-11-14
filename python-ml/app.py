@@ -264,8 +264,184 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         if value is None:
             return default
         return float(value)
-    except (TypeError, ValueError):
+    except (OverflowError, TypeError, ValueError):
         return default
+
+
+def _safe_integer(value: Any, minimum: int, maximum: int) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    numeric = _safe_float(value, float("nan"))
+    if not isfinite(numeric) or not numeric.is_integer() or not minimum <= numeric <= maximum:
+        return None
+    return int(numeric)
+
+
+def _sanitize_network_record(record: dict[str, Any]) -> dict[str, Any]:
+    protocol = record.get("protocol")
+    sanitized = {
+        "protocol": protocol.strip().upper()[:20]
+        if isinstance(protocol, str) and protocol.strip()
+        else "OTHER",
+    }
+    for field in ("sourcePort", "destinationPort"):
+        value = _safe_integer(record.get(field), 0, 65535)
+        if value is not None:
+            sanitized[field] = value
+    packet_size = _safe_integer(record.get("packetSize"), 0, 2147483647)
+    if packet_size is not None:
+        sanitized["packetSize"] = packet_size
+    return sanitized
+
+
+def _sanitize_malware_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    file_info = evidence.get("file")
+    if isinstance(file_info, dict):
+        safe_file: dict[str, Any] = {}
+        extension = file_info.get("extension")
+        if isinstance(extension, str) and re.fullmatch(r"\.[A-Za-z0-9]{1,15}", extension):
+            safe_file["extension"] = extension.lower()
+        size = _safe_integer(file_info.get("sizeBytes"), 0, 2147483647)
+        if size is not None:
+            safe_file["sizeBytes"] = size
+        if safe_file:
+            sanitized["file"] = safe_file
+
+    model_info = evidence.get("model")
+    if isinstance(model_info, dict):
+        safe_model: dict[str, Any] = {}
+        label = model_info.get("label")
+        if isinstance(label, str):
+            safe_model["label"] = label.strip()[:100]
+        confidence = model_info.get("confidence")
+        if isinstance(confidence, (int, float)) and not isinstance(confidence, bool):
+            confidence_value = _safe_float(confidence, float("nan"))
+            if isfinite(confidence_value) and 0 <= confidence_value <= 100:
+                safe_model["confidence"] = round(confidence_value, 2)
+        class_id = _safe_integer(model_info.get("classId"), -1, 1000000)
+        if class_id is not None:
+            safe_model["classId"] = class_id
+        if safe_model:
+            sanitized["model"] = safe_model
+
+    yara_info = evidence.get("yara")
+    if isinstance(yara_info, dict):
+        safe_yara: dict[str, Any] = {}
+        if isinstance(yara_info.get("matched"), bool):
+            safe_yara["matched"] = yara_info["matched"]
+        rule_names = yara_info.get("matchedRules")
+        if isinstance(rule_names, list):
+            safe_yara["matchedRules"] = [
+                value.strip()[:100]
+                for value in rule_names[:20]
+                if isinstance(value, str) and value.strip()
+            ]
+        if safe_yara:
+            sanitized["yara"] = safe_yara
+
+    for field, max_length in (
+        ("deterministicScanResult", 32),
+        ("threatName", 200),
+        ("scanEngine", 100),
+        ("yaraRuleMatched", 200),
+    ):
+        value = evidence.get(field)
+        if isinstance(value, str) and value.strip():
+            sanitized[field] = value.strip()[:max_length]
+    for field in ("fileSize", "virustotalPositives", "virustotalTotal"):
+        value = _safe_integer(evidence.get(field), 0, 2147483647)
+        if value is not None:
+            sanitized[field] = value
+    return sanitized
+
+
+def _sanitize_sarvam_report_data(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise ValueError("data must be a JSON object")
+
+    sanitized: dict[str, Any] = {}
+    generated_at = data.get("generatedAt")
+    if generated_at is not None:
+        if not isinstance(generated_at, str):
+            raise ValueError("generatedAt must be a string")
+        sanitized["generatedAt"] = generated_at.strip()[:40]
+    sanitized["source"] = "database"
+    period_days = _safe_integer(data.get("periodDays"), 1, 365)
+    if period_days is not None:
+        sanitized["periodDays"] = period_days
+
+    summary = data.get("summary", {})
+    if not isinstance(summary, dict):
+        raise ValueError("summary must be a JSON object")
+    safe_summary: dict[str, Any] = {}
+    for field in (
+        "alerts",
+        "openIncidents",
+        "infectedFiles",
+        "windowsEvents",
+        "securityRelevantWindowsEvents",
+        "cveRecordsProvided",
+    ):
+        value = _safe_integer(summary.get(field), 0, 2147483647)
+        if value is not None:
+            safe_summary[field] = value
+    anomaly_model = summary.get("anomalyModel")
+    if isinstance(anomaly_model, str) and anomaly_model in {"ready", "not ready"}:
+        safe_summary["anomalyModel"] = anomaly_model
+    sanitized["summary"] = safe_summary
+
+    row_fields = {
+        "recentAlerts": ("severity", "type", "status", "timestamp"),
+        "recentIncidents": ("severity", "status", "createdAt"),
+        "recentMalware": ("verdict", "threat", "engine"),
+        "recentVulnerabilities": ("cveId",),
+    }
+    for collection, text_fields in row_fields.items():
+        rows = data.get(collection, [])
+        if not isinstance(rows, list):
+            raise ValueError(f"{collection} must be an array")
+        safe_rows: list[dict[str, Any]] = []
+        for row in rows[:20]:
+            if not isinstance(row, dict):
+                raise ValueError(f"{collection} entries must be JSON objects")
+            safe_row: dict[str, Any] = {}
+            for field in text_fields:
+                value = row.get(field)
+                if value is None:
+                    continue
+                if not isinstance(value, str):
+                    raise ValueError(f"{collection}.{field} must be a string")
+                safe_row[field] = value.strip()[:200]
+            if collection == "recentMalware":
+                for field in ("virustotalPositives", "virustotalTotal"):
+                    value = _safe_integer(row.get(field), 0, 2147483647)
+                    if value is not None:
+                        safe_row[field] = value
+            elif collection == "recentVulnerabilities":
+                score = row.get("cvssScore")
+                if isinstance(score, (int, float)) and not isinstance(score, bool):
+                    score_value = _safe_float(score, float("nan"))
+                    if isfinite(score_value) and 0 <= score_value <= 10:
+                        safe_row["cvssScore"] = round(score_value, 2)
+                for field in ("totalFindings", "criticalCount", "highCount", "mediumCount", "lowCount"):
+                    value = _safe_integer(row.get(field), 0, 2147483647)
+                    if value is not None:
+                        safe_row[field] = value
+            safe_rows.append(safe_row)
+        sanitized[collection] = safe_rows
+
+    event_levels = data.get("windowsEventLevels", {})
+    if not isinstance(event_levels, dict):
+        raise ValueError("windowsEventLevels must be a JSON object")
+    sanitized["windowsEventLevels"] = {
+        key.strip()[:40]: count
+        for key, raw_count in list(event_levels.items())[:20]
+        if isinstance(key, str)
+        and key.strip()
+        and (count := _safe_integer(raw_count, 0, 2147483647)) is not None
+    }
+    return sanitized
 
 
 class SarvamServiceError(Exception):
@@ -295,6 +471,8 @@ def _request_sarvam_json(system_prompt: str, user_payload: Any, max_tokens: int 
                 },
             ],
             max_tokens=max_tokens,
+            reasoning_effort="low",
+            response_format={"type": "json_object"},
         )
         content = response.choices[0].message.content
     except Exception as ex:
@@ -374,7 +552,7 @@ def _enrich_anomaly_results(
     items = [
         {
             "index": index,
-            "record": record,
+            "record": _sanitize_network_record(record),
             "detectorVerdict": "anomaly" if detection.get("anomaly") else "normal",
             "detectorScore": detection.get("anomaly_score"),
         }
@@ -459,7 +637,7 @@ def _enrich_malware_result(result: dict[str, Any], evidence: dict[str, Any]) -> 
         else _is_malware_label(result.get("label"), result.get("class_id"))
     )
     try:
-        assessment = _sarvam_assess("malware_analysis", evidence)
+        assessment = _sarvam_assess("malware_analysis", _sanitize_malware_evidence(evidence))
     except SarvamServiceError as ex:
         return {
             **result,
@@ -700,7 +878,6 @@ def _scan_file_with_malware(file_path: Path) -> dict[str, Any]:
                 "extension": file_path.suffix.lower(),
                 "sizeBytes": file_path.stat().st_size,
             },
-            "derivedFeatures": features,
             "model": {
                 "label": payload["label"],
                 "confidence": payload["confidence"],
@@ -945,8 +1122,10 @@ def sarvam_report():
         return jsonify({"error": "title must be a non-empty string of at most 120 characters"}), 400
 
     analysis_data = body.get("data")
-    if not isinstance(analysis_data, (dict, list)):
-        return jsonify({"error": "data must be a JSON object or array"}), 400
+    try:
+        analysis_data = _sanitize_sarvam_report_data(analysis_data)
+    except ValueError as ex:
+        return jsonify({"error": str(ex)}), 400
     serialized_data = json.dumps(analysis_data, ensure_ascii=True, separators=(",", ":"))
     if len(serialized_data) > 32000:
         return jsonify({"error": "data exceeds the 32000-character report limit"}), 413
@@ -991,10 +1170,7 @@ def malware_analyze():
     if not isinstance(body, dict):
         return jsonify({"error": "A JSON object is required"}), 400
 
-    file_name = body.get("fileName")
     scan_result = body.get("scanResult")
-    if not isinstance(file_name, str) or not file_name.strip() or len(file_name) > 255:
-        return jsonify({"error": "fileName must be a non-empty string of at most 255 characters"}), 400
     if not isinstance(scan_result, str) or scan_result.strip().lower() not in {
         "clean", "suspicious", "infected", "error"
     }:
@@ -1003,21 +1179,22 @@ def malware_analyze():
     raw_file_size = body.get("fileSize")
     if isinstance(raw_file_size, bool):
         return jsonify({"error": "fileSize must be a non-negative finite number"}), 400
-    file_size = _safe_float(raw_file_size)
+    file_size = _safe_float(raw_file_size, float("nan"))
     if not isfinite(file_size) or file_size < 0:
         return jsonify({"error": "fileSize must be a non-negative finite number"}), 400
 
-    evidence = {
-        "fileName": file_name.strip(),
-        "fileSize": file_size,
-        "sha256": str(body.get("fileHash", ""))[:128],
+    evidence = _sanitize_malware_evidence({
+        "file": {
+            "extension": body.get("fileExtension"),
+            "sizeBytes": file_size,
+        },
         "deterministicScanResult": scan_result.strip().lower(),
         "threatName": str(body.get("threatName", ""))[:500],
         "scanEngine": str(body.get("scanEngine", ""))[:100],
         "yaraRuleMatched": str(body.get("yaraRuleMatched", ""))[:500],
         "virustotalPositives": body.get("virustotalPositives"),
         "virustotalTotal": body.get("virustotalTotal"),
-    }
+    })
 
     try:
         assessment = _sarvam_assess("malware_scan", evidence)

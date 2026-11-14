@@ -145,7 +145,7 @@ export default function WindowsEvents({ appState }) {
       <Panel title="Sarvam Windows Event Analysis" subtitle="Analyze stored event logs or ask a question about recent activity">
         <div style={{ padding:16 }}>
           <div style={{ marginBottom:10, color:"#64748b", fontSize:11 }}>
-            Up to 50 selected event messages and metadata are sent to Sarvam; raw event XML is excluded.
+            Up to 50 stored events are analyzed using event IDs, channel, level, provider, time, and security relevance. Messages, usernames, and computer names are excluded.
           </div>
           <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
             <select
@@ -214,7 +214,7 @@ export default function WindowsEvents({ appState }) {
                         <div style={{ fontSize:11, color:"#64748b", marginBottom:4 }}>
                           {event.eventTime} · {event.channel} · Event {event.eventId} · {event.level}
                         </div>
-                        <div style={{ fontSize:12, color:"#334155", whiteSpace:"pre-wrap" }}>{event.message}</div>
+                        <div style={{ fontSize:12, color:"#334155" }}>Provider: {event.source || "Unknown"}</div>
                       </div>
                     ))}
                   </div>

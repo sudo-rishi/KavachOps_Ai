@@ -129,17 +129,14 @@ public class SarvamWindowsEventService {
         return result;
     }
 
-    private Map<String, Object> toSafeEventRecord(WindowsEventLog event) {
+    Map<String, Object> toSafeEventRecord(WindowsEventLog event) {
         Map<String, Object> record = new LinkedHashMap<>();
         record.put("logId", event.getLogId());
         record.put("eventId", event.getEventId());
         record.put("channel", event.getChannel());
         record.put("level", event.getLevel());
         record.put("source", event.getSource());
-        record.put("computerName", event.getComputerName());
-        record.put("userName", event.getUserName());
         record.put("eventTime", event.getEventTime() == null ? null : event.getEventTime().toString());
-        record.put("message", truncate(event.getMessage(), 1000));
         record.put("securityRelevant", event.isSecurityRelevant());
         return record;
     }

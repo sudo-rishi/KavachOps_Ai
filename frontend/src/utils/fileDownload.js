@@ -27,14 +27,10 @@ export function triggerBrowserDownload(blob, fileName) {
   link.href = objectUrl;
   link.download = fileName;
   document.body.appendChild(link);
-  link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+  link.click();
 
   setTimeout(() => {
-    try {
-      document.body.removeChild(link);
-      URL.revokeObjectURL(objectUrl);
-    } catch {
-      // noop
-    }
-  }, 250);
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+  }, 1000);
 }

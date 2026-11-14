@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-//  useRealtime — Manages all live data from Shield-God backend
+//  useRealtime — Manages all live data from KavachOps AI backend
 //  • Polls REST every SYNC_MS for bulk data
 //  • Receives WebSocket pushes for real-time updates
 //  • Auto-starts packet capture after login
@@ -565,6 +565,9 @@ export function useRealtime() {
 
       // Sarvam receives scan metadata only; the deterministic scan verdict remains authoritative.
       if (scan) {
+        const fileExtension = typeof scan.fileName === "string"
+          ? scan.fileName.match(/\.[A-Za-z0-9]{1,15}$/)?.[0].toLowerCase()
+          : undefined;
         if (!authState.mlOnline) {
           scan._mlError = "Python ML service is offline";
         } else if (data.mlStatus?.services?.sarvam?.configured !== true) {
@@ -574,9 +577,8 @@ export function useRealtime() {
         } else {
           try {
             const mlResult = await mlApi.analyzeFile({
-              fileName:     scan.fileName,
+              fileExtension,
               fileSize:     scan.fileSize,
-              fileHash:     scan.fileHash,
               scanResult:   scan.scanResult,
               threatName:   scan.threatName,
               scanEngine:   scan.scanEngine,

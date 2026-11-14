@@ -31,7 +31,25 @@ function ReportTemplateIcon({ type }) {
   return <svg {...common}><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>;
 }
 
-function createMockReportBlob(template, format, appState, synced30d) {
+async function loadBrandLogoDataUrl() {
+  const response = await fetch("/kavachops-logo.png");
+  if (!response.ok) {
+    throw new Error(`Could not load the KavachOps logo (HTTP ${response.status})`);
+  }
+
+  const logo = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("Could not read the KavachOps logo"));
+    };
+    reader.onerror = () => reject(new Error("Could not read the KavachOps logo"));
+    reader.readAsDataURL(logo);
+  });
+}
+
+async function createMockReportBlob(template, format, appState, synced30d) {
   const currentNow = now();
   const stamp = fmtISODate(currentNow);
   const baseName = `${template.name.replace(/\s+/g, "_")}_${stamp}`;
@@ -51,6 +69,7 @@ function createMockReportBlob(template, format, appState, synced30d) {
 
   if (format === "pdf") {
     const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const logoDataUrl = await loadBrandLogoDataUrl();
     const pageWidth = 595.28;
     const pageHeight = 841.89;
     const marginX = 46;
@@ -64,13 +83,7 @@ function createMockReportBlob(template, format, appState, synced30d) {
     doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
     doc.rect(0, 96, pageWidth, 16, "F");
 
-    // Logo mark (simple vector style for reliability)
-    doc.setFillColor(255, 255, 255);
-    doc.circle(marginX + 16, 56, 16, "F");
-    doc.setTextColor(primaryBlue[0], primaryBlue[1], primaryBlue[2]);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text("SG", marginX + 8, 60);
+    doc.addImage(logoDataUrl, "PNG", marginX, 39, 36, 33.6);
 
     // Branding + report heading
     doc.setTextColor(255, 255, 255);
@@ -413,15 +426,6 @@ export default function Reports({ appState, onToast }) {
         const { blob, fileName } = await reportsApi.downloadVulnerabilityPdf();
         const downloadName = fileName || `Vulnerability_Report_${fmtISODate(now())}.pdf`;
 
-        try {
-          const saved = await saveBlobWithPicker(blob, downloadName, "application/pdf");
-          if (!saved) {
-            triggerBrowserDownload(blob, downloadName);
-          }
-        } catch {
-          triggerBrowserDownload(blob, downloadName);
-        }
-
         const report = {
           id: Date.now(),
           name: downloadName,
@@ -433,20 +437,21 @@ export default function Reports({ appState, onToast }) {
           blob,
         };
         setGenerated(p => [report, ...p]);
+
+        try {
+          const saved = await saveBlobWithPicker(blob, downloadName, "application/pdf");
+          if (!saved) {
+            triggerBrowserDownload(blob, downloadName);
+          }
+        } catch {
+          triggerBrowserDownload(blob, downloadName);
+        }
+
         onToast(`${template.name} generated and downloaded`, "success");
         return;
       }
 
-      const built = createMockReportBlob(template, format, appState, reportData30d);
-      try {
-        const saved = await saveBlobWithPicker(built.blob, built.fileName, built.mime);
-        if (!saved) {
-          triggerBrowserDownload(built.blob, built.fileName);
-        }
-      } catch {
-        triggerBrowserDownload(built.blob, built.fileName);
-      }
-
+      const built = await createMockReportBlob(template, format, appState, reportData30d);
       const report = {
         id: Date.now(),
         name: built.fileName,
@@ -458,6 +463,16 @@ export default function Reports({ appState, onToast }) {
         blob: built.blob,
       };
       setGenerated(p => [report, ...p]);
+
+      try {
+        const saved = await saveBlobWithPicker(built.blob, built.fileName, built.mime);
+        if (!saved) {
+          triggerBrowserDownload(built.blob, built.fileName);
+        }
+      } catch {
+        triggerBrowserDownload(built.blob, built.fileName);
+      }
+
       onToast(`${template.name} generated successfully`, "success");
     } catch (e) {
       onToast(`Failed to generate ${template.name}: ${e.message || "unknown error"}`, "error");
@@ -470,37 +485,63 @@ export default function Reports({ appState, onToast }) {
     if (generating) return;
     setGenerating("sarvam");
     try {
-      const recentAlerts = alerts.slice(0, 20).map(({ severity, alertType, status, timestamp }) => ({
+      const reportSnapshot = await refresh30dSync({ silent: true });
+      if (!reportSnapshot) {
+        throw new Error("Could not retrieve current database data; Sarvam was not sent a report request.");
+      }
+
+      const databaseData = reportSnapshot.data;
+      const databaseSummary = reportSnapshot.summary;
+      if (!databaseData || !databaseSummary) {
+        throw new Error("Database report sync returned incomplete data; Sarvam was not sent a report request.");
+      }
+
+      const readRows = (name, value) => {
+        if (!Array.isArray(value)) {
+          throw new Error(`Database report sync did not return ${name}.`);
+        }
+        return value.filter(row => row && typeof row === "object");
+      };
+      const alertRows = readRows("alerts", databaseData.alerts);
+      const incidentRows = readRows("incidents", databaseData.incidents);
+      const malwareRows = readRows("malware scans", databaseData.malwareScans);
+      const eventRows = readRows("Windows events", databaseData.winEvents);
+      const cveRows = readRows("vulnerability summaries", reportSnapshot.cveRecords);
+
+      const recentAlerts = alertRows.slice(0, 20).map(({ severity, alertType, status, timestamp }) => ({
         severity, type: alertType, status, timestamp,
       }));
-      const recentIncidents = incidents.slice(0, 20).map(({ severity, status, category, createdAt }) => ({
-        severity, status, category, createdAt,
+      const recentIncidents = incidentRows.slice(0, 20).map(({ severity, status, createdAt }) => ({
+        severity, status, createdAt,
       }));
-      const recentMalware = malwareScans.slice(0, 20).map((scan) => ({
+      const recentMalware = malwareRows.slice(0, 20).map((scan) => ({
         verdict: scan.scanResult,
         threat: scan.threatName || null,
         engine: scan.scanEngine || null,
         virustotalPositives: scan.virustotalPositives || 0,
         virustotalTotal: scan.virustotalTotal || 0,
       }));
-      const recentVulnerabilities = vulnFindings.slice(0, 20).map(({ severity, status, cveId, cvssScore, vulnerabilityName }) => ({
-        severity, status, cveId, cvssScore, vulnerability: vulnerabilityName,
+      const recentVulnerabilities = cveRows.slice(0, 20).map(({
+        cveId, cvssScore, totalFindings, criticalCount, highCount, mediumCount, lowCount,
+      }) => ({
+        cveId, cvssScore, totalFindings, criticalCount, highCount, mediumCount, lowCount,
       }));
-      const winEvents = appState.winEvents || [];
-      const eventLevels = winEvents.reduce((counts, event) => {
+      const eventLevels = eventRows.reduce((counts, event) => {
         const level = String(event.level || "unknown");
         counts[level] = (counts[level] || 0) + 1;
         return counts;
       }, {});
       const data = {
         generatedAt: now().toISOString(),
+        source: "database",
+        periodDays: reportSnapshot.days,
         summary: {
-          alerts: alerts.length,
-          openIncidents: incidents.filter(item => ["open", "investigating"].includes(item.status)).length,
-          infectedFiles: malwareScans.filter(item => item.scanResult === "infected").length,
-          criticalVulnerabilities: vulnFindings.filter(item => item.severity === "critical").length,
-          windowsEvents: winEvents.length,
-          securityRelevantWindowsEvents: winEvents.filter(item => item.securityRelevant).length,
+          alerts: databaseSummary.alerts,
+          openIncidents: databaseSummary.openIncidents,
+          infectedFiles: databaseSummary.infectedFiles,
+          windowsEvents: databaseSummary.windowsEvents,
+          securityRelevantWindowsEvents: databaseSummary.windowsSecurityEvents,
+          cveRecordsProvided: cveRows.length,
           anomalyModel: appState.mlStatus?.services?.anomaly?.ready ? "ready" : "not ready",
         },
         recentAlerts,
@@ -514,8 +555,6 @@ export default function Reports({ appState, onToast }) {
         data,
       });
       const name = fileName || `KavachOps_AI_Sarvam_Report_${fmtISODate(now())}.pdf`;
-      const saved = await saveBlobWithPicker(blob, name, "application/pdf").catch(() => false);
-      if (!saved) triggerBrowserDownload(blob, name);
       setGenerated(p => [{
         id: Date.now(),
         name,
@@ -526,7 +565,16 @@ export default function Reports({ appState, onToast }) {
         status: "completed",
         blob,
       }, ...p]);
-      onToast("Sarvam explanatory report generated and downloaded", "success");
+      try {
+        triggerBrowserDownload(blob, name);
+      } catch (downloadError) {
+        onToast(
+          `Report generated, but automatic download failed: ${downloadError.message || "unknown error"}. Use Download below.`,
+          "warning"
+        );
+        return;
+      }
+      onToast("Sarvam report generated. If the download did not start, use Download below.", "success");
     } catch (err) {
       onToast(`Sarvam report failed: ${err.message || "unknown error"}`, "error");
     } finally {
@@ -635,14 +683,14 @@ export default function Reports({ appState, onToast }) {
 
       <Panel
         title="Sarvam AI Explanation"
-        subtitle="Generate a narrative PDF from the current security summary"
+        subtitle="Generate a narrative PDF from the latest 30 days of database data"
         style={{ marginBottom:20 }}
         actions={<Btn size="sm" variant="primary" onClick={generateSarvamReport} disabled={!!generating}>
           {generating === "sarvam" ? "Generating…" : "Generate AI report"}
         </Btn>}
       >
         <div style={{ padding:"10px 18px", color:"var(--color-text-secondary)", fontSize:12, lineHeight:1.55 }}>
-          The report sends aggregated counts and limited recent alert, incident, malware, and vulnerability metadata to Sarvam.
+          The report refreshes the latest 30 days from the backend and sends aggregated counts plus limited alert, incident, malware, and CVE metadata to Sarvam.
           Raw Windows event messages, usernames, file paths, hashes, and host IPs are excluded.
         </div>
       </Panel>

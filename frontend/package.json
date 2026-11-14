@@ -1,8 +1,8 @@
 {
-  "name": "shield-god-frontend",
+  "name": "kavachops-ai-frontend",
   "private": true,
   "version": "1.0.0",
-  "description": "Shield-God SOC Platform – React Frontend",
+  "description": "KavachOps AI SOC Platform – React Frontend",
   "type": "module",
   "scripts": {
     "dev": "vite",
